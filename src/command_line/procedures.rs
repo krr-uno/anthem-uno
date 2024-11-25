@@ -12,6 +12,7 @@ use {
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp::mini_gringo as asp, fol::sigma_0 as fol},
         translating::{
+            ordered_completion::ordered_completion,
             classical_reduction::{completion::Completion as _, gamma::Gamma as _},
             formula_representation::{mu::Mu as _, natural::Natural as _, tau_star::TauStar as _},
         },
@@ -158,6 +159,14 @@ pub fn main() -> Result<()> {
                         .natural()
                         .context("the given program is not regular")?;
                     print!("{theory}")
+                }
+
+                Translation::OrderedCompletion => {
+                    let theory =
+                        input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
+                    let ordered_completion_theory = ordered_completion(theory)
+                        .context("the given theory is not completable")?;
+                    print!("{ordered_completion_theory}")
                 }
 
                 Translation::TauStar => {
