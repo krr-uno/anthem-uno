@@ -59,6 +59,8 @@ pub fn ordered_completion(theory: fol::Theory) -> Option<fol::Theory> {
 }
 
 fn create_order_formula(p: fol::Atom, q: fol::Atom) -> fol::Formula {
+    // creates the atomic formula less_p_q(xs, ys)
+    // where p(xs) and q(ys) are the given atoms
     fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
         predicate_symbol: format!("less_{}_{}", p.predicate_symbol, q.predicate_symbol),
         terms: p.terms.into_iter().chain(q.terms).collect(),
@@ -66,8 +68,9 @@ fn create_order_formula(p: fol::Atom, q: fol::Atom) -> fol::Formula {
 }
 
 fn conjoin_order_atoms(formula: fol::Formula, head_atom: fol::Atom) -> fol::Formula {
-    // replaces all positive atoms q(zs) in formula (i.e. all q(zs) not in the scope of any negation) by
-    // q(zs) and less_q_p(zs, xs)
+    // replaces all positive atoms q(zs) in formula
+    // (i.e. all q(zs) not in the scope of any negation) by
+    //   q(zs) and less_q_p(zs, xs)
     // where p(xs) is head_atom
     match formula {
         fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(ref q)) => {
