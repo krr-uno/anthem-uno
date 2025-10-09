@@ -18,6 +18,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         property: Property,
 
+        /// The ASP dialect of the input
+        #[arg(long, value_enum)]
+        dialect: Dialect,
+
         /// The file to analyze
         input: Option<PathBuf>,
     },
@@ -69,6 +73,10 @@ pub enum Command {
         /// The decomposition strategy to use
         #[arg(long, value_enum, default_value_t)]
         decomposition: Decomposition,
+
+        /// The ASP dialect of the input
+        #[arg(long, value_enum)]
+        dialect: Dialect,
 
         /// The direction of the proof
         #[arg(long, value_enum, default_value_t)]
@@ -124,6 +132,13 @@ pub enum Command {
     },
 }
 
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Dialect {
+    #[default]
+    MiniGringo,
+    MiniGringoCL,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Property {
     Regularity,
@@ -132,7 +147,8 @@ pub enum Property {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ParseAs {
-    Program,
+    MiniGringoProgram,
+    MiniGringoCLProgram,
     Theory,
     Specification,
     UserGuide,

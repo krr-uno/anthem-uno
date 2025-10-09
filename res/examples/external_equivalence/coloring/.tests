@@ -1,1 +1,1 @@
-tptp_compliance verify --equivalence external --no-proof-search --save-problems $OUT coloring.lp coloring.spec coloring.ug
+tptp_compliance verify --equivalence external --dialect mini-gringo --no-proof-search --save-problems $OUT coloring.lp coloring.spec coloring.ug

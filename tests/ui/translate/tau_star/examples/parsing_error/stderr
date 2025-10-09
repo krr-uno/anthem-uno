@@ -1,9 +1,6 @@
-Error: could not parse file `tests/ui/translate/tau_star/examples/parsing_error/program.lp`
-
-Caused by:
-     --> 2:13
-      |
-    2 | p(X) :- q(X++1), not r(X).
-      |             ^---
-      |
-      = expected precomputed_term, variable, or negative
+Error:  --> 2:13
+  |
+2 | p(X) :- q(X++1), not r(X).
+  |             ^---
+  |
+  = expected precomputed_term, variable, negative, or absolute_valued_term

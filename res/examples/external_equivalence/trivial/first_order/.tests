@@ -1,1 +1,1 @@
-tptp_compliance verify --equivalence external --no-proof-search --save-problems $OUT first_order.spec first_order.lp first_order.ug
+tptp_compliance verify --equivalence external --dialect mini-gringo --no-proof-search --save-problems $OUT first_order.spec first_order.lp first_order.ug
