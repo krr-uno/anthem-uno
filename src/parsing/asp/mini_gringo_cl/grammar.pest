@@ -1,0 +1,89 @@
+WHITESPACE = _{ " " | NEWLINE }
+COMMENT = _{ "%" ~ (!NEWLINE ~ ANY)* ~ (NEWLINE | EOI) }
+
+precomputed_term = { infimum | integer | symbol | supremum }
+precomputed_term_eoi = _{ precomputed_term ~ EOI }
+    infimum = @{ "#infimum" | "#inf" }
+    integer = @{ "0" | "-"? ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
+    symbol = @{ !negation ~ "_"? ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
+    supremum = @{ "#supremum" | "#sup" }
+
+variable = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHANUMERIC* }
+variable_eoi = _{ variable ~ EOI }
+
+unary_operator = _{ negative }
+unary_operator_eoi = _{ unary_operator ~ EOI }
+    negative = { !integer ~ "-" }
+
+binary_operator = _{ add | subtract | multiply | divide | modulo | interval }
+binary_operator_eoi = _{ binary_operator ~ EOI }
+    add = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide = { "/" }
+    modulo = { "\\" }
+    interval = { ".." }
+
+absolute_valued_term = { "|" ~ term ~ "|" }
+absolute_valued_term_eoi = _{ absolute_valued_term ~ EOI }
+
+term = { unary_operator* ~ primary_term ~ (binary_operator ~ unary_operator* ~ primary_term)* }
+term_eoi = _{ term ~ EOI }
+    primary_term = _{ precomputed_term | variable | absolute_valued_term | "(" ~ term ~ ")"}
+
+predicate = { symbol ~ "/" ~ arity }
+predicate_eoi = _{ predicate ~ EOI }
+    arity =  @{ ("0") | (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*) }
+
+atom = { symbol ~ term_tuple? }
+atom_eoi = _{ atom ~ EOI }
+    term_tuple = _{ "(" ~ (term ~ ("," ~ term)*)? ~ ")" }
+
+sign = { negation{0, 2} }
+sign_eoi = _{ sign ~ EOI }
+    negation = @{ "not" ~ &(WHITESPACE | EOI)}
+
+literal = { sign ~ atom }
+literal_eoi = _{ literal ~ EOI }
+
+relation = _{ equal | not_equal | less_equal | less | greater_equal | greater }
+relation_eoi = _{ relation ~ EOI }
+    equal = { "=" }
+    not_equal = { "!=" }
+    less = { "<" }
+    less_equal = { "<=" }
+    greater = { ">" }
+    greater_equal = { ">=" }
+
+comparison = { term ~ relation ~ term }
+comparison_eoi = _{ comparison ~ EOI }
+
+atomic_formula = { comparison | literal }
+atomic_formula_eoi = _{ atomic_formula ~ EOI }
+
+conditional_head = { atomic_formula | explicit_false }
+    explicit_false = { "#false" }
+conditional_head_eoi = _{ conditional_head ~ EOI }
+
+conditional_body = { atomic_formula ~ ("," ~ atomic_formula)* }
+conditional_body_eoi = _{ conditional_body ~ EOI }
+
+conditional_literal = { conditional_head ~ (":" ~ conditional_body)? }
+conditional_literal_eoi = _{ conditional_literal ~ EOI }
+
+head = { basic_head | choice_head | falsity }
+head_eoi = _{ head ~ EOI }
+    basic_head = { atom }
+    choice_head = { "{" ~ atom ~ "}" }
+    falsity = { "#false"? }
+
+body_literal = _{ conditional_literal }
+
+body = { (body_literal ~ (("," | ";") ~ body_literal)*)? }
+body_eoi = _{ body ~ EOI }
+
+rule = { (!"." ~ head ~ (":-" ~ body)?) ~ "." }
+rule_eoi = _{ rule ~ EOI }
+
+program = { rule* }
+program_eoi = _{ program ~ EOI }
