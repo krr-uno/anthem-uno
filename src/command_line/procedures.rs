@@ -225,13 +225,8 @@ pub fn main() -> Result<()> {
 
                 Translation::TauStar => {
                     let program = get_program_of_unknown_dialect(input)?;
-                    match program {
-                        Program::MiniGringo(program) => {
-                            let theory = program.tau_star();
-                            print!("{theory}")
-                        }
-                        Program::MiniGringoCl(_) => todo!(),
-                    }
+                    let theory = program.tau_star();
+                    print!("{theory}")
                 }
             }
 
