@@ -8,6 +8,22 @@ use {
     indexmap::IndexSet,
 };
 
+pub trait OrderedCompletion {
+    type Inputs;
+
+    fn ordered_completion(self, inputs: Self::Inputs) -> Option<Self>
+    where
+        Self: Sized;
+}
+
+impl OrderedCompletion for sigma_0::Theory {
+    type Inputs = IndexSet<sigma_0::Predicate>;
+
+    fn ordered_completion(self, inputs: Self::Inputs) -> Option<Self> {
+        ordered_completion(self, inputs)
+    }
+}
+
 pub fn ordered_completion(
     theory: sigma_0::Theory,
     inputs: IndexSet<sigma_0::Predicate>,
@@ -218,7 +234,7 @@ pub fn ordered_completion_axioms(theory: sigma_0::Theory) -> sigma_0::Theory {
 
 #[cfg(test)]
 mod tests {
-    use super::{ordered_completion, ordered_completion_axioms};
+    use super::{ordered_completion_axioms, OrderedCompletion as _};
     use crate::{
         syntax_tree::{asp::mini_gringo, fol::sigma_0},
         translating::formula_representation::tau_star::TauStar as _,
@@ -283,19 +299,18 @@ mod tests {
             (
                 "t(X,Y) :- e(X,Y). t(X,Z) :- e(X,Y), t(Y,Z).",
                 "forall V1 V2 (t(V1, V2) <- exists X Y (V1 = X and V2 = Y and exists Z Z1 (Z = X and Z1 = Y and e(Z, Z1))) or exists X Z Y (V1 = X and V2 = Z and (exists Z Z1 (Z = X and Z1 = Y and e(Z, Z1)) and exists Z1 Z2 (Z1 = Y and Z2 = Z and t(Z1, Z2))))). forall V1 V2 (t(V1, V2) -> exists X Y (V1 = X and V2 = Y and exists Z Z1 (Z = X and Z1 = Y and (e(Z, Z1) and less_e_t(Z, Z1, V1, V2)))) or exists X Z Y (V1 = X and V2 = Z and (exists Z Z1 (Z = X and Z1 = Y and (e(Z, Z1) and less_e_t(Z, Z1, V1, V2))) and exists Z1 Z2 (Z1 = Y and Z2 = Z and (t(Z1, Z2) and less_t_t(Z1, Z2, V1, V2)))))).",
-                IndexSet::from_iter(vec![
-                    sigma_0::Predicate {
-                        symbol: "e".to_string(),
-                        arity: 2,
-                    }
-                ])
+                IndexSet::from_iter(vec![sigma_0::Predicate {
+                    symbol: "e".to_string(),
+                    arity: 2,
+                }]),
             ),
         ] {
-            let left = ordered_completion(
-                src.parse::<mini_gringo::Program>().unwrap().tau_star(),
-                inputs,
-            )
-            .unwrap();
+            let left = src
+                .parse::<mini_gringo::Program>()
+                .unwrap()
+                .tau_star()
+                .ordered_completion(inputs)
+                .unwrap();
             let right = target.parse().unwrap();
 
             assert!(
@@ -315,7 +330,7 @@ mod tests {
         ] {
             let theory: sigma_0::Theory = theory.parse().unwrap();
             assert!(
-                ordered_completion(theory.clone(), IndexSet::new()).is_none(),
+                theory.clone().ordered_completion(IndexSet::new()).is_none(),
                 "`{theory}` should not be completable"
             );
         }

@@ -14,7 +14,7 @@ use {
         translating::{
             classical_reduction::{
                 completion::Completion as _, gamma::Gamma as _,
-                ordered_completion::ordered_completion,
+                ordered_completion::OrderedCompletion as _,
             },
             formula_representation::{mu::Mu as _, natural::Natural as _, tau_star::TauStar as _},
         },
@@ -166,7 +166,8 @@ pub fn main() -> Result<()> {
                 Translation::OrderedCompletion => {
                     let theory =
                         input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-                    let ordered_completion_theory = ordered_completion(theory, IndexSet::new())
+                    let ordered_completion_theory = theory
+                        .ordered_completion(IndexSet::new())
                         .context("the given theory is not completable")?;
                     print!("{ordered_completion_theory}")
                 }
