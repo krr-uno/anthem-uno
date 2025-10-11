@@ -10,7 +10,7 @@ use {
         },
         convenience::{apply::Apply, compose::Compose},
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol, Node as _},
+        syntax_tree::{Node as _, asp::mini_gringo as asp, fol::sigma_0 as fol},
         translating::{
             classical_reduction::{
                 completion::Completion as _, gamma::Gamma as _,
@@ -19,14 +19,14 @@ use {
             formula_representation::{mu::Mu as _, natural::Natural as _, tau_star::TauStar as _},
         },
         verifying::{
-            prover::{vampire::Vampire, Prover, Report, Status, Success},
+            prover::{Prover, Report, Status, Success, vampire::Vampire},
             task::{
-                external_equivalence::ExternalEquivalenceTask,
-                strong_equivalence::StrongEquivalenceTask, Task,
+                Task, external_equivalence::ExternalEquivalenceTask,
+                strong_equivalence::StrongEquivalenceTask,
             },
         },
     },
-    anyhow::{anyhow, Context, Result},
+    anyhow::{Context, Result, anyhow},
     clap::Parser as _,
     either::Either,
     indexmap::IndexSet,

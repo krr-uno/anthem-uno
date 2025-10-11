@@ -2,7 +2,7 @@ use {
     crate::{
         syntax_tree::fol::sigma_0,
         translating::classical_reduction::completion::{
-            atomic_formula_from, components, has_head_mismatches, Definitions,
+            Definitions, atomic_formula_from, components, has_head_mismatches,
         },
     },
     indexmap::IndexSet,
@@ -234,7 +234,7 @@ pub fn ordered_completion_axioms(theory: sigma_0::Theory) -> sigma_0::Theory {
 
 #[cfg(test)]
 mod tests {
-    use super::{ordered_completion_axioms, OrderedCompletion as _};
+    use super::{OrderedCompletion as _, ordered_completion_axioms};
     use crate::{
         syntax_tree::{asp::mini_gringo, fol::sigma_0},
         translating::formula_representation::tau_star::TauStar as _,
