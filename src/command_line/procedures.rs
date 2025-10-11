@@ -166,7 +166,7 @@ pub fn main() -> Result<()> {
                 Translation::OrderedCompletion => {
                     let theory =
                         input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-                    let ordered_completion_theory = ordered_completion(theory)
+                    let ordered_completion_theory = ordered_completion(theory, IndexSet::new())
                         .context("the given theory is not completable")?;
                     print!("{ordered_completion_theory}")
                 }

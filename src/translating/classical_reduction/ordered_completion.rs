@@ -1,19 +1,50 @@
-use crate::{
-    syntax_tree::fol::sigma_0,
-    translating::classical_reduction::completion::{components, has_head_mismatches},
+use {
+    crate::{
+        syntax_tree::fol::sigma_0,
+        translating::classical_reduction::completion::{
+            atomic_formula_from, components, has_head_mismatches, Definitions,
+        },
+    },
+    indexmap::IndexSet,
 };
 
-pub fn ordered_completion(theory: sigma_0::Theory) -> Option<sigma_0::Theory> {
-    let (definitions, constraints) = components(theory)?;
+pub fn ordered_completion(
+    theory: sigma_0::Theory,
+    inputs: IndexSet<sigma_0::Predicate>,
+) -> Option<sigma_0::Theory> {
+    let theory_predicates = theory.predicates();
+
+    let (explicit_definitions, constraints) = components(theory)?;
+
+    let mut explicit_predicates = IndexSet::new();
+    for formula in explicit_definitions.keys() {
+        if let sigma_0::AtomicFormula::Atom(atom) = formula {
+            explicit_predicates.insert(atom.predicate());
+        }
+    }
+
+    let mut definitions = explicit_definitions;
+    for predicate in theory_predicates.difference(&explicit_predicates) {
+        definitions.insert(atomic_formula_from(predicate), Vec::new());
+    }
 
     if has_head_mismatches(&definitions) {
         return None;
     }
 
+    let mut final_definitions = Definitions::new();
+    for (head, body) in definitions {
+        if let sigma_0::AtomicFormula::Atom(atom) = head.clone() {
+            if !inputs.contains(&atom.predicate()) {
+                final_definitions.insert(head, body);
+            }
+        }
+    }
+
     // rule translations for each p, i.e.
     // forall X (p(X) <- disjoin(rule bodies of p(X)) )
     // this is just the normal completion but instead of equivalences using <-
-    let rule_translations = definitions.clone().into_iter().map(|(p, bodies)| {
+    let rule_translations = final_definitions.clone().into_iter().map(|(p, bodies)| {
         let v = p.variables();
         sigma_0::Formula::BinaryFormula {
             connective: sigma_0::BinaryConnective::ReverseImplication,
@@ -30,7 +61,7 @@ pub fn ordered_completion(theory: sigma_0::Theory) -> Option<sigma_0::Theory> {
     // definition parts for each p, i.e.
     // forall X (disjoin(rule bodies of p(X) with order constraint) -> p(X))
     // this is the -> part of normal completion modified to include the order constraints
-    let definitions_with_order = definitions.into_iter().map(|(p, bodies)| {
+    let definitions_with_order = final_definitions.into_iter().map(|(p, bodies)| {
         let v = p.variables();
         match p {
             sigma_0::AtomicFormula::Atom(ref head_atom) => sigma_0::Formula::BinaryFormula {
@@ -189,21 +220,82 @@ pub fn ordered_completion_axioms(theory: sigma_0::Theory) -> sigma_0::Theory {
 mod tests {
     use super::{ordered_completion, ordered_completion_axioms};
     use crate::{
-        syntax_tree::asp::mini_gringo, syntax_tree::fol::sigma_0,
+        syntax_tree::{asp::mini_gringo, fol::sigma_0},
         translating::formula_representation::tau_star::TauStar as _,
     };
+    use indexmap::IndexSet;
 
     #[test]
     fn test_ordered_completion() {
-        for (src, target) in [
-            ("p :- q.", "p <- q. p -> q and less_q_p."),
-            ("p(X) :- q.", "forall V1 (p(V1) <- exists X (V1 = X and q)). forall V1 (p(V1) -> exists X (V1 = X and (q and less_q_p(V1))))."),
-            ("p(X) :- q(X).", "forall V1 (p(V1) <- exists X (V1 = X and exists Z (Z = X and q(Z)))). forall V1 (p(V1) -> exists X (V1 = X and exists Z (Z = X and (q(Z) and less_q_p(Z, V1)))))."),
-            ("p(X) :- q(X). p(X) :- not r(X).", "forall V1 (p(V1) <- exists X (V1 = X and exists Z (Z = X and q(Z))) or exists X (V1 = X and exists Z (Z = X and not r(Z)))). forall V1 (p(V1) -> exists X (V1 = X and exists Z (Z = X and (q(Z) and less_q_p(Z, V1)))) or exists X (V1 = X and exists Z (Z = X and not r(Z))))."),
-            ("p(X) :- q(X-1). {p(X)} :- r(X,Y).", "forall V1 (p(V1) <- exists X (V1 = X and exists Z (exists I$i J$i (Z = I$i - J$i and I$i = X and J$i = 1) and q(Z))) or exists X Y (V1 = X and exists Z Z1 (Z = X and Z1 = Y and r(Z, Z1)) and not not p(V1))). forall V1 (p(V1) -> exists X (V1 = X and exists Z (exists I$i J$i (Z = I$i - J$i and I$i = X and J$i = 1) and (q(Z) and less_q_p(Z, V1)))) or exists X Y (V1 = X and exists Z Z1 (Z = X and Z1 = Y and (r(Z, Z1) and less_r_p(Z, Z1, V1))) and not not p(V1)))."),
-            ("t(X,Y) :- e(X,Y). t(X,Z) :- e(X,Y), t(Y,Z).", "forall V1 V2 (t(V1, V2) <- exists X Y (V1 = X and V2 = Y and exists Z Z1 (Z = X and Z1 = Y and e(Z, Z1))) or exists X Z Y (V1 = X and V2 = Z and (exists Z Z1 (Z = X and Z1 = Y and e(Z, Z1)) and exists Z1 Z2 (Z1 = Y and Z2 = Z and t(Z1, Z2))))). forall V1 V2 (t(V1, V2) -> exists X Y (V1 = X and V2 = Y and exists Z Z1 (Z = X and Z1 = Y and (e(Z, Z1) and less_e_t(Z, Z1, V1, V2)))) or exists X Z Y (V1 = X and V2 = Z and (exists Z Z1 (Z = X and Z1 = Y and (e(Z, Z1) and less_e_t(Z, Z1, V1, V2))) and exists Z1 Z2 (Z1 = Y and Z2 = Z and (t(Z1, Z2) and less_t_t(Z1, Z2, V1, V2))))))."),
+        for (src, target, inputs) in [
+            (
+                "p :- q.",
+                "p <- q. p -> q and less_q_p.",
+                IndexSet::from_iter(vec![sigma_0::Predicate {
+                    symbol: "q".to_string(),
+                    arity: 0,
+                }]),
+            ),
+            (
+                "p(X) :- q.",
+                "forall V1 (p(V1) <- exists X (V1 = X and q)). forall V1 (p(V1) -> exists X (V1 = X and (q and less_q_p(V1)))).",
+                IndexSet::from_iter(vec![sigma_0::Predicate {
+                    symbol: "q".to_string(),
+                    arity: 0,
+                }]),
+            ),
+            (
+                "p(X) :- q(X).",
+                "forall V1 (p(V1) <- exists X (V1 = X and exists Z (Z = X and q(Z)))). forall V1 (p(V1) -> exists X (V1 = X and exists Z (Z = X and (q(Z) and less_q_p(Z, V1))))).",
+                IndexSet::from_iter(vec![sigma_0::Predicate {
+                    symbol: "q".to_string(),
+                    arity: 1,
+                }]),
+            ),
+            (
+                "p(X) :- q(X). p(X) :- not r(X).",
+                "forall V1 (p(V1) <- exists X (V1 = X and exists Z (Z = X and q(Z))) or exists X (V1 = X and exists Z (Z = X and not r(Z)))). forall V1 (p(V1) -> exists X (V1 = X and exists Z (Z = X and (q(Z) and less_q_p(Z, V1)))) or exists X (V1 = X and exists Z (Z = X and not r(Z)))).",
+                IndexSet::from_iter(vec![
+                    sigma_0::Predicate {
+                        symbol: "q".to_string(),
+                        arity: 1,
+                    },
+                    sigma_0::Predicate {
+                        symbol: "r".to_string(),
+                        arity: 1,
+                    },
+                ]),
+            ),
+            (
+                "p(X) :- q(X-1). {p(X)} :- r(X,Y).",
+                "forall V1 (p(V1) <- exists X (V1 = X and exists Z (exists I$i J$i (Z = I$i - J$i and I$i = X and J$i = 1) and q(Z))) or exists X Y (V1 = X and exists Z Z1 (Z = X and Z1 = Y and r(Z, Z1)) and not not p(V1))). forall V1 (p(V1) -> exists X (V1 = X and exists Z (exists I$i J$i (Z = I$i - J$i and I$i = X and J$i = 1) and (q(Z) and less_q_p(Z, V1)))) or exists X Y (V1 = X and exists Z Z1 (Z = X and Z1 = Y and (r(Z, Z1) and less_r_p(Z, Z1, V1))) and not not p(V1))).",
+                IndexSet::from_iter(vec![
+                    sigma_0::Predicate {
+                        symbol: "q".to_string(),
+                        arity: 1,
+                    },
+                    sigma_0::Predicate {
+                        symbol: "r".to_string(),
+                        arity: 2,
+                    },
+                ]),
+            ),
+            (
+                "t(X,Y) :- e(X,Y). t(X,Z) :- e(X,Y), t(Y,Z).",
+                "forall V1 V2 (t(V1, V2) <- exists X Y (V1 = X and V2 = Y and exists Z Z1 (Z = X and Z1 = Y and e(Z, Z1))) or exists X Z Y (V1 = X and V2 = Z and (exists Z Z1 (Z = X and Z1 = Y and e(Z, Z1)) and exists Z1 Z2 (Z1 = Y and Z2 = Z and t(Z1, Z2))))). forall V1 V2 (t(V1, V2) -> exists X Y (V1 = X and V2 = Y and exists Z Z1 (Z = X and Z1 = Y and (e(Z, Z1) and less_e_t(Z, Z1, V1, V2)))) or exists X Z Y (V1 = X and V2 = Z and (exists Z Z1 (Z = X and Z1 = Y and (e(Z, Z1) and less_e_t(Z, Z1, V1, V2))) and exists Z1 Z2 (Z1 = Y and Z2 = Z and (t(Z1, Z2) and less_t_t(Z1, Z2, V1, V2)))))).",
+                IndexSet::from_iter(vec![
+                    sigma_0::Predicate {
+                        symbol: "e".to_string(),
+                        arity: 2,
+                    }
+                ])
+            ),
         ] {
-            let left = ordered_completion(src.parse::<mini_gringo::Program>().unwrap().tau_star()).unwrap();
+            let left = ordered_completion(
+                src.parse::<mini_gringo::Program>().unwrap().tau_star(),
+                inputs,
+            )
+            .unwrap();
             let right = target.parse().unwrap();
 
             assert!(
@@ -223,7 +315,7 @@ mod tests {
         ] {
             let theory: sigma_0::Theory = theory.parse().unwrap();
             assert!(
-                ordered_completion(theory.clone()).is_none(),
+                ordered_completion(theory.clone(), IndexSet::new()).is_none(),
                 "`{theory}` should not be completable"
             );
         }
@@ -232,13 +324,17 @@ mod tests {
     #[test]
     fn test_ordered_completion_axioms() {
         for (src, target) in [
-            ("p :- p.", "not less_p_p. less_p_p and less_p_p -> less_p_p."),
+            (
+                "p :- p.",
+                "not less_p_p. less_p_p and less_p_p -> less_p_p.",
+            ),
             (
                 "p(X) :- q.",
                 "not less_q_q. forall X1 not less_p_p(X1, X1). less_q_q and less_q_q -> less_q_q. forall X1 (less_q_q and less_q_p(X1) -> less_q_p(X1)). forall X1 (less_q_p(X1) and less_p_q(X1) -> less_q_q). forall X1 X2 (less_q_p(X1) and less_p_p(X1, X2) -> less_q_p(X2)). forall X1 (less_p_q(X1) and less_q_q -> less_p_q(X1)). forall X1 X2 (less_p_q(X1) and less_q_p(X2) -> less_p_p(X1, X2)). forall X1 X2 (less_p_p(X1, X2) and less_p_q(X2) -> less_p_q(X1)). forall X1 X2 X3 (less_p_p(X1, X2) and less_p_p(X2, X3) -> less_p_p(X1, X3)).",
             ),
         ] {
-            let left = ordered_completion_axioms(src.parse::<mini_gringo::Program>().unwrap().tau_star());
+            let left =
+                ordered_completion_axioms(src.parse::<mini_gringo::Program>().unwrap().tau_star());
             let right = target.parse().unwrap();
 
             assert!(
