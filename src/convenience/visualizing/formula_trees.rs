@@ -5,7 +5,7 @@ use {
     },
     petgraph::{
         dot::{Config, Dot},
-        graph::{DiGraph, NodeIndex},
+        graph::{DiGraph, Node, NodeIndex},
         visit::EdgeRef,
     },
     std::{collections::HashMap, fmt::Display, fs::File, io::Write},
@@ -25,8 +25,8 @@ pub(crate) enum FolNodePrimitive {
 
 #[derive(Clone, Eq, Debug, PartialEq, Hash)]
 pub(crate) struct FolNode {
-    primitive: FolNodePrimitive,
-    content: String,
+    pub primitive: FolNodePrimitive,
+    pub content: String,
 }
 
 impl Display for FolNode {
@@ -35,8 +35,10 @@ impl Display for FolNode {
     }
 }
 
+type FormulaTree = DiGraph<FolNode, i32>;
+
 // Return a tree rooted at the node corresponding to top-level connective in formula (index)
-pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, DiGraph<FolNode, i32>) {
+pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, FormulaTree) {
     // Create new subtree
     let mut tree = DiGraph::<FolNode, i32>::new();
 
@@ -135,7 +137,7 @@ pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, DiGra
             // Root the new tree at node (with two children, lhs_subtree and rhs_subtree)
             let node = tree.add_node(FolNode { primitive, content });
             tree.update_edge(node, lhs_mapping[&lhs_root_index], 0);
-            tree.update_edge(node, rhs_mapping[&rhs_root_index], 0);
+            tree.update_edge(node, rhs_mapping[&rhs_root_index], 1);
 
             node
         }
@@ -183,4 +185,23 @@ pub(crate) fn visualize_formula_tree(formula: fol::Formula) {
     let mut f = File::create("example1.dot").unwrap();
     let output = format!("{}", Dot::with_config(&tree, &[Config::EdgeNoLabel]));
     f.write_all(&output.as_bytes()).unwrap()
+}
+
+pub(crate) fn leafs(tree: &FormulaTree) -> Vec<NodeIndex> {
+    let mut leafs = Vec::new();
+    for index in tree.node_indices() {
+        if tree.edges(index).count() == 0 {
+            leafs.push(index);
+        }
+    }
+    leafs
+}
+
+pub(crate) fn ancestors(tree: &FormulaTree, index: NodeIndex) -> Vec<NodeIndex> {
+    todo!()
+}
+
+// (rhs subtrees were linked with weight=1 during tree construction)
+pub(crate) fn left_child(tree: &FormulaTree, index: NodeIndex) -> NodeIndex {
+    todo!()
 }

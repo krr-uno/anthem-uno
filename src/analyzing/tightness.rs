@@ -2,27 +2,75 @@ use {
     crate::{
         convenience::{
             unbox::{Unbox, fol::sigma_0::UnboxedFormula},
-            visualizing::formula_trees::grow_tree_from_formula,
+            visualizing::formula_trees::{
+                FolNode, FolNodePrimitive, ancestors, grow_tree_from_formula, leafs, left_child,
+            },
         },
         syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
     },
     indexmap::IndexSet,
-    petgraph::{algo::is_cyclic_directed, graph::DiGraph},
+    petgraph::{
+        algo::{has_path_connecting, is_cyclic_directed},
+        graph::DiGraph,
+    },
     std::collections::HashMap,
 };
 
 impl fol::Formula {
     fn contains_positive_nonnegated_occurrence(&self, predicate: &fol::Predicate) -> bool {
-        // 1. Convert every `F -> false` into `not F` and every `F <- G` into `G -> F`
-        // 2. An occurrence of a predicate is negated if it has an ancestor who is `not`
-        // 3. Add 1 to the count for every `not` ancestor, every `<->` ancestor, and every `->` ancestor when occurrence is left child
+        // TODO: Convert every `F -> false` into `not F` and every `F <- G` into `G -> F`
+
+        // 1. An occurrence of a predicate is negated if it has an ancestor who is `not`
+        // 2. Add 1 to the count for every `not` ancestor, every `<->` ancestor, and every `->` ancestor when occurrence is left child
 
         // every occurrence of a predicate occurs in a leaf node
         // iterate through leaf nodes, check ancestors
 
-        let tree = grow_tree_from_formula(self.clone());
+        let mut flag = false;
 
-        todo!()
+        let (_, tree) = grow_tree_from_formula(self.clone());
+
+        for index in leafs(&tree) {
+            if let FolNode {
+                primitive: FolNodePrimitive::Atomic,
+                content,
+            } = tree[index].clone()
+            {
+                if let fol::AtomicFormula::Atom(atom) = content.parse().unwrap() {
+                    if atom.predicate() == *predicate {
+                        let mut negated = false;
+                        let mut positive_count = 0;
+
+                        for a in ancestors(&tree, index) {
+                            let ancestor = tree[a].clone();
+                            match ancestor.primitive {
+                                FolNodePrimitive::Implication => {
+                                    // Ensure index occurs in lhs subtree (antecedent) of ancestor
+                                    let lhs = left_child(&tree, a);
+                                    if has_path_connecting(&tree, lhs, index, None) {
+                                        positive_count += 1;
+                                    }
+                                }
+                                FolNodePrimitive::Equivalence => {
+                                    positive_count += 1;
+                                }
+                                FolNodePrimitive::Negation => {
+                                    negated = true;
+                                    positive_count += 1;
+                                }
+                                _ => (),
+                            }
+                        }
+
+                        if (!negated && positive_count % 2 == 0) {
+                            flag = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        flag
     }
 }
 
