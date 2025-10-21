@@ -122,6 +122,12 @@ pub enum Command {
         #[arg(verbatim_doc_comment)]
         files: Vec<PathBuf>,
     },
+
+    /// Visualize the AST of a first-order formula
+    Visualize {
+        /// The file to visualize
+        input: Option<PathBuf>,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

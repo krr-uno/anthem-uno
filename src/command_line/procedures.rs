@@ -8,7 +8,9 @@ use {
             },
             files::Files,
         },
-        convenience::{apply::Apply, compose::Compose},
+        convenience::{
+            apply::Apply, compose::Compose, visualizing::formula_trees::visualize_formula_tree,
+        },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp::mini_gringo as asp, fol::sigma_0 as fol},
         translating::{
@@ -51,7 +53,6 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-
         Command::Parse {
             r#as,
             output,
@@ -96,7 +97,6 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-
         Command::Simplify {
             portfolio,
             strategy,
@@ -125,7 +125,6 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-
         Command::Translate { with, input } => {
             match with {
                 Translation::Completion => {
@@ -170,7 +169,6 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-
         Command::Verify {
             equivalence,
             decomposition,
@@ -327,6 +325,14 @@ pub fn main() -> Result<()> {
 
                 println!()
             }
+
+            Ok(())
+        }
+
+        Command::Visualize { input } => {
+            let theory = input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
+            let formula = fol::Formula::conjoin(theory);
+            visualize_formula_tree(formula);
 
             Ok(())
         }
