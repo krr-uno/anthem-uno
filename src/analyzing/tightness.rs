@@ -11,6 +11,12 @@ pub trait Tightness {
 
 impl Tightness for asp::Program {
     fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool {
+
+        // TODO: is this check necessary?
+        if !(self.predicates().is_subset(&intensional_predicates) && self.predicates().is_superset(&intensional_predicates)) {
+            return false
+        }
+
         let mut dependency_graph = DiGraph::<(), ()>::new();
         let mut mapping = HashMap::new();
 
