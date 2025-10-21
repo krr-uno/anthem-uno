@@ -44,7 +44,13 @@ impl Tightness for asp::Program {
 impl Tightness for fol::Theory {
     // This definition of tightness is defined for theories in Clark Normal Form
     fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool {
-        todo!()
+        let intensional = IndexSet::from_iter(intensional_predicates.iter().map(|p| p.clone().into()));
+        match self.clone().clark_normal_form(intensional) {
+            Some(theory) => {
+                todo!()
+            },
+            None => false,
+        }
     }
 }
 

@@ -16,7 +16,7 @@ impl fol::Theory {
     // Otherwise, compute CNF of theory (all intensional predicate definitions in CNF)
     // Very similar to computing completion of a completable theory
     // In the resulting theory, extensional predicates will also be in CNF
-    fn clark_normal_form(self, intensional: IndexSet<fol::Predicate>) -> Option<Self> {
+    pub(crate) fn clark_normal_form(self, intensional: IndexSet<fol::Predicate>) -> Option<Self> {
         // Retrieve the definitions and constraints present in the theory
         let (explicit_definitions, constraints) = components(self)?;
 
