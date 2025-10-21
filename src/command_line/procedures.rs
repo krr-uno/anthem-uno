@@ -44,7 +44,7 @@ pub fn main() -> Result<()> {
                 Property::Tightness => {
                     let program =
                         input.map_or_else(asp::Program::from_stdin, asp::Program::from_file)?;
-                    let is_tight = program.is_tight();
+                    let is_tight = program.is_tight(program.predicates());
                     println!("{is_tight}");
                 }
             }

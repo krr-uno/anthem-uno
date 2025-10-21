@@ -1,19 +1,20 @@
 use {
-    crate::syntax_tree::asp::mini_gringo::Program,
+    crate::syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+    indexmap::IndexSet,
     petgraph::{algo::is_cyclic_directed, graph::DiGraph},
     std::collections::HashMap,
 };
 
 pub trait Tightness {
-    fn is_tight(&self) -> bool;
+    fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool;
 }
 
-impl Tightness for Program {
-    fn is_tight(&self) -> bool {
+impl Tightness for asp::Program {
+    fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool {
         let mut dependency_graph = DiGraph::<(), ()>::new();
         let mut mapping = HashMap::new();
 
-        for predicate in self.predicates() {
+        for predicate in intensional_predicates {
             let node = dependency_graph.add_node(());
             mapping.insert(predicate, node);
         }
@@ -34,6 +35,13 @@ impl Tightness for Program {
     }
 }
 
+impl Tightness for fol::Theory {
+    // This definition of tightness is defined for theories in Clark Normal Form
+    fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool {
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use {super::Tightness, crate::syntax_tree::asp::mini_gringo::Program, std::str::FromStr};
@@ -47,7 +55,8 @@ mod tests {
             "p(a) :- p.",
             "p(X) :- not q(X). q(X) :- p(X).",
         ] {
-            assert!(Program::from_str(program).unwrap().is_tight())
+            let program = Program::from_str(program).unwrap();
+            assert!(program.is_tight(program.predicates()))
         }
 
         for program in [
@@ -55,7 +64,8 @@ mod tests {
             "a :- b. b :- a.",
             "p :- q, not r. p :- r. r :- p.",
         ] {
-            assert!(!Program::from_str(program).unwrap().is_tight())
+            let program = Program::from_str(program).unwrap();
+            assert!(!program.is_tight(program.predicates()))
         }
     }
 }
