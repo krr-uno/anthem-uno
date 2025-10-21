@@ -99,7 +99,7 @@ pub(crate) fn has_head_mismatches(definitions: &Definitions) -> bool {
     false
 }
 
-fn atomic_formula_from(predicate: &fol::Predicate) -> fol::AtomicFormula {
+pub(crate) fn atomic_formula_from(predicate: &fol::Predicate) -> fol::AtomicFormula {
     // Make 'V' off-limits for consistency with global variable selection strategy
     let taken_variables = IndexSet::from_iter(vec![fol::Variable {
         name: "V".to_string(),
