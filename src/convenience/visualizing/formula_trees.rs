@@ -4,8 +4,10 @@ use {
         syntax_tree::fol::sigma_0 as fol,
     },
     petgraph::{
+        Direction::{Incoming, Outgoing},
+        algo::is_cyclic_directed,
         dot::{Config, Dot},
-        graph::{DiGraph, Node, NodeIndex},
+        graph::{DiGraph, NodeIndex},
         visit::EdgeRef,
     },
     std::{collections::HashMap, fmt::Display, fs::File, io::Write},
@@ -43,13 +45,10 @@ pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, Formu
     let mut tree = DiGraph::<FolNode, i32>::new();
 
     let index = match formula.unbox() {
-        UnboxedFormula::AtomicFormula(atomic_formula) => {
-            let node = tree.add_node(FolNode {
-                primitive: FolNodePrimitive::Atomic,
-                content: format!("{atomic_formula}"),
-            });
-            node
-        }
+        UnboxedFormula::AtomicFormula(atomic_formula) => tree.add_node(FolNode {
+            primitive: FolNodePrimitive::Atomic,
+            content: format!("{atomic_formula}"),
+        }),
 
         UnboxedFormula::UnaryFormula {
             connective,
@@ -76,7 +75,7 @@ pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, Formu
                 // Root the new tree at node
                 let node = tree.add_node(FolNode {
                     primitive: FolNodePrimitive::Negation,
-                    content: format!("not"),
+                    content: "not".to_string(),
                 });
                 tree.update_edge(node, mapping[&subtree_root_index], 0);
                 node
@@ -90,16 +89,16 @@ pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, Formu
         } => {
             let (primitive, content) = match connective {
                 fol::BinaryConnective::Conjunction => {
-                    (FolNodePrimitive::Conjunction, format!("and"))
+                    (FolNodePrimitive::Conjunction, "and".to_string())
                 }
                 fol::BinaryConnective::Disjunction => {
-                    (FolNodePrimitive::Disjunction, format!("or"))
+                    (FolNodePrimitive::Disjunction, "or".to_string())
                 }
                 fol::BinaryConnective::Implication => {
-                    (FolNodePrimitive::Implication, format!("implies"))
+                    (FolNodePrimitive::Implication, "implies".to_string())
                 }
                 fol::BinaryConnective::Equivalence => {
-                    (FolNodePrimitive::Equivalence, format!("equivalent"))
+                    (FolNodePrimitive::Equivalence, "equivalent".to_string())
                 }
                 fol::BinaryConnective::ReverseImplication => unreachable!(),
             };
@@ -179,14 +178,6 @@ pub(crate) fn grow_tree_from_formula(formula: fol::Formula) -> (NodeIndex, Formu
     (index, tree)
 }
 
-pub(crate) fn visualize_formula_tree(formula: fol::Formula) {
-    let (_, tree) = grow_tree_from_formula(formula);
-    println!("{}", Dot::with_config(&tree, &[Config::EdgeNoLabel]));
-    let mut f = File::create("example1.dot").unwrap();
-    let output = format!("{}", Dot::with_config(&tree, &[Config::EdgeNoLabel]));
-    f.write_all(&output.as_bytes()).unwrap()
-}
-
 pub(crate) fn leafs(tree: &FormulaTree) -> Vec<NodeIndex> {
     let mut leafs = Vec::new();
     for index in tree.node_indices() {
@@ -198,10 +189,31 @@ pub(crate) fn leafs(tree: &FormulaTree) -> Vec<NodeIndex> {
 }
 
 pub(crate) fn ancestors(tree: &FormulaTree, index: NodeIndex) -> Vec<NodeIndex> {
-    todo!()
+    // Ensure that tree is a tree
+    assert!(!is_cyclic_directed(tree));
+
+    let mut ancestors = Vec::new();
+
+    let mut current = index;
+    while let Some(edge) = tree.edges_directed(current, Incoming).next() {
+        let parent = edge.source();
+        ancestors.push(parent);
+        current = parent;
+    }
+
+    ancestors
 }
 
+// Return first child with weight=0 on the connecting edge
 // (rhs subtrees were linked with weight=1 during tree construction)
-pub(crate) fn left_child(tree: &FormulaTree, index: NodeIndex) -> NodeIndex {
-    todo!()
+pub(crate) fn left_child(tree: &FormulaTree, index: NodeIndex) -> Option<NodeIndex> {
+    let mut node = None;
+    let children = tree.edges_directed(index, Outgoing);
+    for child in children {
+        if *child.weight() == 0 {
+            node = Some(child.target());
+            break;
+        }
+    }
+    node
 }

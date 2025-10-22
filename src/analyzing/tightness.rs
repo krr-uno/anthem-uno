@@ -6,7 +6,10 @@ use {
                 FolNode, FolNodePrimitive, ancestors, grow_tree_from_formula, leafs, left_child,
             },
         },
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            asp::mini_gringo as asp,
+            fol::sigma_0::{self as fol, Quantification, Quantifier},
+        },
     },
     indexmap::IndexSet,
     petgraph::{
@@ -30,6 +33,9 @@ impl fol::Formula {
 
         let (_, tree) = grow_tree_from_formula(self.clone());
 
+        // Ensure the tree is a tree
+        assert!(!is_cyclic_directed(&tree));
+
         for index in leafs(&tree) {
             if let FolNode {
                 primitive: FolNodePrimitive::Atomic,
@@ -46,7 +52,7 @@ impl fol::Formula {
                             match ancestor.primitive {
                                 FolNodePrimitive::Implication => {
                                     // Ensure index occurs in lhs subtree (antecedent) of ancestor
-                                    let lhs = left_child(&tree, a);
+                                    let lhs = left_child(&tree, a).unwrap();
                                     if has_path_connecting(&tree, lhs, index, None) {
                                         positive_count += 1;
                                     }
@@ -62,7 +68,7 @@ impl fol::Formula {
                             }
                         }
 
-                        if (!negated && positive_count % 2 == 0) {
+                        if !negated && positive_count % 2 == 0 {
                             flag = true;
                         }
                     }
@@ -71,6 +77,77 @@ impl fol::Formula {
         }
 
         flag
+    }
+}
+
+impl fol::Theory {
+    pub(crate) fn predicate_dependency_graph(
+        self,
+        intensional_predicates: IndexSet<fol::Predicate>,
+    ) -> DiGraph<String, i32> {
+        let mut dependency_graph = DiGraph::<String, i32>::new();
+        let mut mapping = HashMap::new();
+
+        // Add intensional predicates as vertices
+        for predicate in intensional_predicates.iter() {
+            let node = dependency_graph.add_node(format!("{}/{}", predicate.symbol, predicate.arity));
+            mapping.insert(predicate.clone(), node);
+        }
+
+        // Add edge (p,q) if theory contains a formula `forall V (p(V) <- G)` or `p <- G`
+        // where q has a positive nonnegated occurrence in G
+        for formula in self {
+            match formula.unbox() {
+                UnboxedFormula::BinaryFormula {
+                    connective: fol::BinaryConnective::ReverseImplication,
+                    lhs: fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)),
+                    rhs,
+                } => {
+                    let p = atom.predicate();
+                    if intensional_predicates.contains(&p) {
+                        for q in intensional_predicates.iter() {
+                            if rhs.contains_positive_nonnegated_occurrence(q) {
+                                dependency_graph.update_edge(mapping[&p], mapping[q], 1);
+                            }
+                        }
+                    }
+                }
+
+                UnboxedFormula::QuantifiedFormula {
+                    quantification:
+                        Quantification {
+                            quantifier: Quantifier::Forall,
+                            variables,
+                        },
+                    formula: inner,
+                } => {
+                    if let UnboxedFormula::BinaryFormula {
+                        connective: fol::BinaryConnective::ReverseImplication,
+                        lhs: fol::Formula::AtomicFormula(head),
+                        rhs,
+                    } = inner.unbox()
+                    {
+                        let hvars = head.variables();
+                        let variables: IndexSet<fol::Variable> = IndexSet::from_iter(variables);
+                        if let fol::AtomicFormula::Atom(atom) = head {
+                            let p = atom.predicate();
+                            if intensional_predicates.contains(&p)
+                                && hvars.is_subset(&variables)
+                                && variables.is_subset(&hvars)
+                            {
+                                for q in intensional_predicates.iter() {
+                                    if rhs.contains_positive_nonnegated_occurrence(q) {
+                                        dependency_graph.update_edge(mapping[&p], mapping[q], 1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => (),
+            }
+        }
+        dependency_graph
     }
 }
 
@@ -117,51 +194,9 @@ impl Tightness for fol::Theory {
             IndexSet::from_iter(intensional_predicates.iter().map(|p| p.clone().into()));
         match self.clone().clark_normal_form(&intensional) {
             Some(theory) => {
-                let mut dependency_graph = DiGraph::<(), ()>::new();
-                let mut mapping = HashMap::new();
-
-                // Add intensional predicates as vertices
-                for predicate in intensional.iter() {
-                    let node = dependency_graph.add_node(());
-                    mapping.insert(predicate.clone(), node);
-                }
-
-                // Add edge (p,q) if theory contains a formula `forall V (p(V) <- G)` or `p <- G`
-                // where q has a positive nonnegated occurrence in G
-                for formula in theory {
-                    match formula.unbox() {
-                        UnboxedFormula::BinaryFormula {
-                            connective: fol::BinaryConnective::ReverseImplication,
-                            lhs: fol::Formula::AtomicFormula(head),
-                            rhs,
-                        } => {
-                            if let fol::AtomicFormula::Atom(atom) = head {
-                                let p = atom.predicate();
-                                if intensional.contains(&p) {
-                                    for q in intensional.iter() {
-                                        if rhs.contains_positive_nonnegated_occurrence(q) {
-                                            dependency_graph.update_edge(
-                                                mapping[&p],
-                                                mapping[q],
-                                                (),
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        UnboxedFormula::QuantifiedFormula {
-                            quantification,
-                            formula,
-                        } => todo!(),
-
-                        _ => (),
-                    }
-                }
-
+                let dependency_graph = theory.predicate_dependency_graph(intensional);
                 !is_cyclic_directed(&dependency_graph)
-            }
+            },
             None => false,
         }
     }
@@ -169,10 +204,17 @@ impl Tightness for fol::Theory {
 
 #[cfg(test)]
 mod tests {
-    use {super::Tightness, crate::syntax_tree::asp::mini_gringo::Program, std::str::FromStr};
+    use {
+        super::Tightness,
+        crate::syntax_tree::{
+            asp::mini_gringo::{Predicate, Program},
+            fol::sigma_0::Theory,
+        },
+        std::str::FromStr,
+    };
 
     #[test]
-    fn test_tightness() {
+    fn test_program_tightness() {
         for program in [
             "a.",
             "a :- not a.",
@@ -191,6 +233,38 @@ mod tests {
         ] {
             let program = Program::from_str(program).unwrap();
             assert!(!program.is_tight(program.predicates()))
+        }
+    }
+
+    #[test]
+    fn test_theory_tightness() {
+        for theory in [
+            "p <- q.",
+            "forall X ( (not not ( (p(X) -> q(X)) -> r(X)) ) -> p(X)).",
+        ] {
+            let theory = Theory::from_str(theory).unwrap();
+            let intensionals = theory
+                .predicates()
+                .iter()
+                .map(|p| Predicate {
+                    symbol: p.symbol.clone(),
+                    arity: p.arity,
+                })
+                .collect();
+            assert!(theory.is_tight(intensionals))
+        }
+
+        for theory in ["forall X ( ((p(X) -> q(X)) -> r(X)) -> p(X))."] {
+            let theory = Theory::from_str(theory).unwrap();
+            let intensionals = theory
+                .predicates()
+                .iter()
+                .map(|p| Predicate {
+                    symbol: p.symbol.clone(),
+                    arity: p.arity,
+                })
+                .collect();
+            assert!(!theory.is_tight(intensionals))
         }
     }
 }

@@ -123,8 +123,16 @@ pub enum Command {
         files: Vec<PathBuf>,
     },
 
-    /// Visualize the AST of a first-order formula
+    /// Visualize a first-order formula
     Visualize {
+        /// The property to visualize
+        #[arg(long, value_enum)]
+        property: Visualization,
+
+        /// The destination directory for the visualization file
+        #[arg(long)]
+        save_visualization: PathBuf,
+
         /// The file to visualize
         input: Option<PathBuf>,
     },
@@ -134,6 +142,12 @@ pub enum Command {
 pub enum Property {
     Regularity,
     Tightness,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Visualization {
+    Ast,
+    DependencyGraph,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

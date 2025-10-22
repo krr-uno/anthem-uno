@@ -4,12 +4,12 @@ use {
         command_line::{
             arguments::{
                 Arguments, Command, Equivalence, Output, ParseAs, Property,
-                SimplificationPortfolio, SimplificationStrategy, Translation,
+                SimplificationPortfolio, SimplificationStrategy, Translation, Visualization,
             },
             files::Files,
         },
         convenience::{
-            apply::Apply, compose::Compose, visualizing::formula_trees::visualize_formula_tree,
+            apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp::mini_gringo as asp, fol::sigma_0 as fol},
@@ -29,7 +29,8 @@ use {
     clap::Parser as _,
     either::Either,
     indexmap::IndexSet,
-    std::time::Instant,
+    petgraph::dot::{Config, Dot},
+    std::{fs::File, io::Write, time::Instant},
 };
 
 pub fn main() -> Result<()> {
@@ -329,10 +330,29 @@ pub fn main() -> Result<()> {
             Ok(())
         }
 
-        Command::Visualize { input } => {
+        Command::Visualize {
+            input,
+            property,
+            save_visualization,
+        } => {
             let theory = input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-            let formula = fol::Formula::conjoin(theory);
-            visualize_formula_tree(formula);
+
+            let output = match property {
+                Visualization::Ast => {
+                    let formula = fol::Formula::conjoin(theory);
+                    let (_, tree) = grow_tree_from_formula(formula);
+                    format!("{}", Dot::with_config(&tree, &[Config::EdgeNoLabel]))
+                },
+                Visualization::DependencyGraph => {
+                    // TODO: allow user to specify set of intensional predicates
+                    let intensional_predicates = theory.predicates();
+                    let graph = theory.predicate_dependency_graph(intensional_predicates);
+                    format!("{}", Dot::with_config(&graph, &[Config::EdgeNoLabel]))
+                },
+            };
+
+            let mut f = File::create(save_visualization).unwrap();
+            f.write_all(output.as_bytes())?;
 
             Ok(())
         }
