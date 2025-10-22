@@ -1,10 +1,15 @@
 use {
     crate::{
         convenience::{
+            apply::Apply,
+            compose::Compose,
             unbox::{Unbox, fol::sigma_0::UnboxedFormula},
             visualizing::formula_trees::{
                 FolNode, FolNodePrimitive, ancestors, grow_tree_from_formula, leafs, left_child,
             },
+        },
+        simplifying::fol::sigma_0::intuitionistic::{
+            apply_negation_definition_inverse, apply_reverse_implication_definition,
         },
         syntax_tree::{
             asp::mini_gringo as asp,
@@ -19,23 +24,25 @@ use {
     std::collections::HashMap,
 };
 
+const TREE: &[fn(fol::Formula) -> fol::Formula] = &[
+    apply_negation_definition_inverse,
+    apply_reverse_implication_definition,
+];
+
 impl fol::Formula {
     fn contains_positive_nonnegated_occurrence(&self, predicate: &fol::Predicate) -> bool {
-        // TODO: Convert every `F -> false` into `not F` and every `F <- G` into `G -> F`
-
-        // 1. An occurrence of a predicate is negated if it has an ancestor who is `not`
-        // 2. Add 1 to the count for every `not` ancestor, every `<->` ancestor, and every `->` ancestor when occurrence is left child
-
-        // every occurrence of a predicate occurs in a leaf node
-        // iterate through leaf nodes, check ancestors
-
         let mut flag = false;
 
-        let (_, tree) = grow_tree_from_formula(self.clone());
+        // Convert every `F -> false` into `not F` and every `F <- G` into `G -> F`
+        let mut tree_prep = [TREE].concat().into_iter().compose();
+        let formula = self.clone().apply_fixpoint(&mut tree_prep);
+        let (_, tree) = grow_tree_from_formula(formula);
 
         // Ensure the tree is a tree
         assert!(!is_cyclic_directed(&tree));
 
+        // Every occurrence of a predicate occurs in a leaf node
+        // Iterate through leaf nodes, check ancestors
         for index in leafs(&tree) {
             if let FolNode {
                 primitive: FolNodePrimitive::Atomic,
@@ -47,6 +54,8 @@ impl fol::Formula {
                         let mut negated = false;
                         let mut positive_count = 0;
 
+                        // An occurrence of a predicate is negated if it has an ancestor in tree who is `not`
+                        // Add 1 to the count for every `not` ancestor, every `<->` ancestor, and every `->` ancestor when occurrence is in left subtree
                         for a in ancestors(&tree, index) {
                             let ancestor = tree[a].clone();
                             match ancestor.primitive {
@@ -252,6 +261,10 @@ mod tests {
     fn test_theory_tightness() {
         for theory in [
             "p <- q.",
+            "p <- ( (p -> q) and (p -> r) ).",
+            "forall X Y ( ((X = a and Y = a) or (X = a and Y = b)) -> p(X,Y) ). forall X (exists Y p(X,Y) -> q(X)).",
+            "forall X ( #false -> p(X) ). forall X ( not p(X) -> q(X) ).",
+            "forall X ( q(X) and not not p(X) -> p(X) ).",
             "forall X ( (not not ( (p(X) -> q(X)) -> r(X)) ) -> p(X)).",
         ] {
             let theory = Theory::from_str(theory).unwrap();
@@ -266,7 +279,12 @@ mod tests {
             assert!(theory.is_tight(intensionals))
         }
 
-        for theory in ["p <- p.", "forall X ( ((p(X) -> q(X)) -> r(X)) -> p(X))."] {
+        for theory in [
+            "p <- p.",
+            "p <- (r -> q). q <- p.",
+            "forall X Y ( p(X,Y) or exists Z (t(X,Z) and t(Z,Y)) -> t(X,Y) ).",
+            "forall X ( ((p(X) -> q(X)) -> r(X)) -> p(X)).",
+        ] {
             let theory = Theory::from_str(theory).unwrap();
             let intensionals = theory
                 .predicates()
