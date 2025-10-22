@@ -342,13 +342,17 @@ pub fn main() -> Result<()> {
                     let formula = fol::Formula::conjoin(theory);
                     let (_, tree) = grow_tree_from_formula(formula);
                     format!("{}", Dot::with_config(&tree, &[Config::EdgeNoLabel]))
-                },
+                }
                 Visualization::DependencyGraph => {
                     // TODO: allow user to specify set of intensional predicates
                     let intensional_predicates = theory.predicates();
-                    let graph = theory.predicate_dependency_graph(intensional_predicates);
-                    format!("{}", Dot::with_config(&graph, &[Config::EdgeNoLabel]))
-                },
+                    match theory.predicate_dependency_graph(intensional_predicates) {
+                        Some(graph) => {
+                            format!("{}", Dot::with_config(&graph, &[Config::EdgeNoLabel]))
+                        }
+                        _ => "".to_string(),
+                    }
+                }
             };
 
             let mut f = File::create(save_visualization).unwrap();

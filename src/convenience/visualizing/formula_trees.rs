@@ -6,11 +6,10 @@ use {
     petgraph::{
         Direction::{Incoming, Outgoing},
         algo::is_cyclic_directed,
-        dot::{Config, Dot},
         graph::{DiGraph, NodeIndex},
         visit::EdgeRef,
     },
-    std::{collections::HashMap, fmt::Display, fs::File, io::Write},
+    std::{collections::HashMap, fmt::Display},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
