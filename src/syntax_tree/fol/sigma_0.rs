@@ -387,6 +387,21 @@ impl From<crate::syntax_tree::asp::mini_gringo::Relation> for Relation {
     }
 }
 
+impl From<crate::syntax_tree::asp::mini_gringo_cl::Relation> for Relation {
+    fn from(value: crate::syntax_tree::asp::mini_gringo_cl::Relation) -> Self {
+        match value {
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::Equal => Relation::Equal,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::NotEqual => Relation::NotEqual,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::Greater => Relation::Greater,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::Less => Relation::Less,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::GreaterEqual => {
+                Relation::GreaterEqual
+            }
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::LessEqual => Relation::LessEqual,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Guard {
     pub relation: Relation,

@@ -1,5 +1,8 @@
 use {
-    crate::syntax_tree::{asp::mini_gringo, fol::sigma_0 as fol},
+    crate::syntax_tree::{
+        asp::{mini_gringo, mini_gringo_cl},
+        fol::sigma_0 as fol,
+    },
     indexmap::IndexSet,
     regex::Regex,
 };
@@ -88,6 +91,35 @@ impl VariableSelection for IndexSet<mini_gringo::Variable> {
 impl VariableSelection for mini_gringo::Program {
     fn choose_fresh_variable(&self, variant: &str) -> String {
         self.variables().choose_fresh_variable(variant)
+    }
+
+    // Choose the first available sequence of variants (alphabetically first)
+    // e.g. if the program contains V2, start selection from V3,...
+    fn choose_fresh_variables(&self, variant: &str, n: usize) -> Vec<String> {
+        let mut max_taken_var = 0;
+        let re = Regex::new(&format!(r"^{variant}(?<number>[0-9]*)$")).unwrap();
+        for var in self.variables() {
+            if let Some(caps) = re.captures(&var.0) {
+                let taken: usize = (caps["number"]).parse().unwrap_or(0);
+                if taken > max_taken_var {
+                    max_taken_var = taken;
+                }
+            }
+        }
+        ((max_taken_var + 1)..(max_taken_var + n + 1))
+            .map(|i| format!("{variant}{i}"))
+            .collect()
+    }
+}
+
+impl VariableSelection for mini_gringo_cl::Program {
+    fn choose_fresh_variable(&self, variant: &str) -> String {
+        let mg_vars: IndexSet<mini_gringo::Variable> = self
+            .variables()
+            .into_iter()
+            .map(|v| mini_gringo::Variable(v.0))
+            .collect();
+        mg_vars.choose_fresh_variable(variant)
     }
 
     // Choose the first available sequence of variants (alphabetically first)

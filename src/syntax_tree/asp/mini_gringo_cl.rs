@@ -576,6 +576,13 @@ impl Rule {
         functions.extend(self.body.function_constants());
         functions
     }
+
+    pub fn is_choice_rule(&self) -> bool {
+        match self.head {
+            Head::Choice(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, IntoIterator)]
