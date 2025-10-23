@@ -64,3 +64,36 @@ macro_rules! impl_node {
 }
 
 pub(crate) use impl_node;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct GenericPredicate {
+    pub symbol: String,
+    pub arity: usize,
+}
+
+impl From<crate::syntax_tree::fol::sigma_0::Predicate> for GenericPredicate {
+    fn from(value: crate::syntax_tree::fol::sigma_0::Predicate) -> Self {
+        GenericPredicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
+impl From<crate::syntax_tree::asp::mini_gringo::Predicate> for GenericPredicate {
+    fn from(value: crate::syntax_tree::asp::mini_gringo::Predicate) -> Self {
+        GenericPredicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
+impl From<crate::syntax_tree::asp::mini_gringo_cl::Predicate> for GenericPredicate {
+    fn from(value: crate::syntax_tree::asp::mini_gringo_cl::Predicate) -> Self {
+        GenericPredicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}

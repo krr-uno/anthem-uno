@@ -32,10 +32,10 @@ use {
     indexmap::IndexSet,
     petgraph::dot::{Config, Dot},
     std::{
-        fs,
-        io::{self, stdin},
+        fs::{self, File},
+        io::{self, Write, stdin},
         path::{Path, PathBuf},
-        {fs::File, io::Write, time::Instant},
+        time::Instant,
     },
 };
 
@@ -86,11 +86,20 @@ pub fn main() -> Result<()> {
                             asp::mini_gringo::Program::from_stdin,
                             asp::mini_gringo::Program::from_file,
                         )?;
-                        let is_tight = program.is_tight(program.predicates());
+                        let intensional_predicates =
+                            program.predicates().into_iter().map(|p| p.into()).collect();
+                        let is_tight = program.is_tight(intensional_predicates);
                         println!("{is_tight}");
                     }
                     Dialect::MiniGringoCL => {
-                        println!("operation unsupported for mg-cl programs");
+                        let program = input.map_or_else(
+                            asp::mini_gringo_cl::Program::from_stdin,
+                            asp::mini_gringo_cl::Program::from_file,
+                        )?;
+                        let intensional_predicates =
+                            program.predicates().into_iter().map(|p| p.into()).collect();
+                        let is_tight = program.tau_star().is_tight(intensional_predicates);
+                        println!("{is_tight}");
                     }
                 },
             }

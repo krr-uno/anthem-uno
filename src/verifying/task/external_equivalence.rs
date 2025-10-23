@@ -254,7 +254,8 @@ impl ExternalEquivalenceTask {
         &self,
         program: &asp::Program,
     ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
-        if program.is_tight(program.predicates()) {
+        let intensional_predicates = program.predicates().into_iter().map(|p| p.into()).collect();
+        if program.is_tight(intensional_predicates) {
             Ok(WithWarnings::flawless(()))
         } else if self.bypass_tightness {
             Ok(WithWarnings::flawless(()).add_warning(

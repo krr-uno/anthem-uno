@@ -12,6 +12,7 @@ use {
             apply_negation_definition_inverse, apply_reverse_implication_definition,
         },
         syntax_tree::{
+            GenericPredicate,
             asp::mini_gringo as asp,
             fol::sigma_0::{self as fol, Quantification, Quantifier},
         },
@@ -176,21 +177,23 @@ impl fol::Theory {
 }
 
 pub trait Tightness {
-    fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool;
+    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool;
 }
 
 impl Tightness for asp::Program {
-    fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool {
+    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
         // TODO: is this check necessary?
+        let program_predicates: IndexSet<GenericPredicate> =
+            self.predicates().into_iter().map(|p| p.into()).collect();
         assert!(
-            self.predicates().is_subset(&intensional_predicates)
-                && self.predicates().is_superset(&intensional_predicates)
+            program_predicates.is_subset(&intensional_predicates)
+                && program_predicates.is_superset(&intensional_predicates)
         );
 
         let mut dependency_graph = DiGraph::<(), ()>::new();
         let mut mapping = HashMap::new();
 
-        for predicate in intensional_predicates {
+        for predicate in intensional_predicates.into_iter().map(asp::Predicate::from) {
             let node = dependency_graph.add_node(());
             mapping.insert(predicate, node);
         }
@@ -212,10 +215,10 @@ impl Tightness for asp::Program {
 }
 
 impl Tightness for fol::Theory {
-    // This definition of tightness is defined for theories in Clark Normal Form
-    fn is_tight(&self, intensional_predicates: IndexSet<asp::Predicate>) -> bool {
-        let intensional =
-            IndexSet::from_iter(intensional_predicates.iter().map(|p| p.clone().into()));
+    // This definition of tightness is defined for completable theories
+    // (or any theory that can be converted to Clark Normal Form)
+    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
+        let intensional = IndexSet::from_iter(intensional_predicates.into_iter().map(|p| p.into()));
         match self.clone().predicate_dependency_graph(intensional) {
             Some(graph) => !is_cyclic_directed(&graph),
             None => false,
@@ -227,10 +230,8 @@ impl Tightness for fol::Theory {
 mod tests {
     use {
         super::Tightness,
-        crate::syntax_tree::{
-            asp::mini_gringo::{Predicate, Program},
-            fol::sigma_0::Theory,
-        },
+        crate::syntax_tree::{asp::mini_gringo::Program, fol::sigma_0::Theory},
+        indexmap::IndexSet,
         std::str::FromStr,
     };
 
@@ -244,7 +245,9 @@ mod tests {
             "p(X) :- not q(X). q(X) :- p(X).",
         ] {
             let program = Program::from_str(program).unwrap();
-            assert!(program.is_tight(program.predicates()))
+            let intensional =
+                IndexSet::from_iter(program.predicates().into_iter().map(|p| p.into()));
+            assert!(program.is_tight(intensional))
         }
 
         for program in [
@@ -253,7 +256,9 @@ mod tests {
             "p :- q, not r. p :- r. r :- p.",
         ] {
             let program = Program::from_str(program).unwrap();
-            assert!(!program.is_tight(program.predicates()))
+            let intensional =
+                IndexSet::from_iter(program.predicates().into_iter().map(|p| p.into()));
+            assert!(!program.is_tight(intensional))
         }
     }
 
@@ -268,14 +273,7 @@ mod tests {
             "forall X ( (not not ( (p(X) -> q(X)) -> r(X)) ) -> p(X)).",
         ] {
             let theory = Theory::from_str(theory).unwrap();
-            let intensionals = theory
-                .predicates()
-                .iter()
-                .map(|p| Predicate {
-                    symbol: p.symbol.clone(),
-                    arity: p.arity,
-                })
-                .collect();
+            let intensionals = theory.predicates().into_iter().map(|p| p.into()).collect();
             assert!(theory.is_tight(intensionals))
         }
 
@@ -286,14 +284,7 @@ mod tests {
             "forall X ( ((p(X) -> q(X)) -> r(X)) -> p(X)).",
         ] {
             let theory = Theory::from_str(theory).unwrap();
-            let intensionals = theory
-                .predicates()
-                .iter()
-                .map(|p| Predicate {
-                    symbol: p.symbol.clone(),
-                    arity: p.arity,
-                })
-                .collect();
+            let intensionals = theory.predicates().into_iter().map(|p| p.into()).collect();
             assert!(!theory.is_tight(intensionals))
         }
     }

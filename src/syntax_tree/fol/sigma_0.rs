@@ -12,7 +12,7 @@ use {
             UserGuideParser, VariableParser,
         },
         simplifying::fol::sigma_0::intuitionistic::join_nested_quantifiers,
-        syntax_tree::{Node, impl_node},
+        syntax_tree::{GenericPredicate, Node, impl_node},
         verifying::problem,
     },
     clap::ValueEnum,
@@ -291,6 +291,15 @@ impl Predicate {
 
 impl From<crate::syntax_tree::asp::mini_gringo::Predicate> for Predicate {
     fn from(value: crate::syntax_tree::asp::mini_gringo::Predicate) -> Self {
+        Predicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
+impl From<GenericPredicate> for Predicate {
+    fn from(value: GenericPredicate) -> Self {
         Predicate {
             symbol: value.symbol,
             arity: value.arity,

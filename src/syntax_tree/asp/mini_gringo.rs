@@ -120,6 +120,15 @@ impl From<crate::syntax_tree::fol::sigma_0::Predicate> for Predicate {
     }
 }
 
+impl From<crate::syntax_tree::GenericPredicate> for Predicate {
+    fn from(value: crate::syntax_tree::GenericPredicate) -> Self {
+        Predicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Atom {
     pub predicate_symbol: String,
