@@ -333,7 +333,7 @@ mod tests {
             ),
             (
                 ":- s(X, I), not covered(X).",
-                "forall X I (exists Z Z1 (Z = X and Z1 = I and s(Z, Z1)) and exists Z (Z = X and not covered(Z)) -> #false). forall V1 V2 (s(V1,V2) <-> #false). forall V1 (covered(V1) <-> #false).",
+                "forall I X (exists Z Z1 (Z = X and Z1 = I and s(Z, Z1)) and exists Z (Z = X and not covered(Z)) -> #false). forall V1 V2 (s(V1,V2) <-> #false). forall V1 (covered(V1) <-> #false).",
                 IndexSet::new(),
             ),
         ] {

@@ -3,8 +3,7 @@ use {
     crate::{
         convenience::{apply::Apply, compose::Compose, variable_selection::VariableSelection},
         simplifying::fol::sigma_0::intuitionistic::{
-            remove_annihilations, remove_empty_quantifications, remove_idempotences,
-            remove_identities, remove_orphaned_variables,
+            remove_conjunctive_identities, remove_empty_quantifications, remove_orphaned_variables,
         },
         syntax_tree::{
             asp::mini_gringo_cl as asp,
@@ -19,9 +18,7 @@ use {
 };
 
 pub const PREPROCESS: &[fn(Formula) -> Formula] = &[
-    remove_identities,
-    remove_annihilations,
-    remove_idempotences,
+    remove_conjunctive_identities,
     remove_orphaned_variables,
     remove_empty_quantifications,
 ];
@@ -844,5 +841,291 @@ impl TauStar for asp::Program {
 
     fn tau_star(self) -> Self::Output {
         tau_star(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{tau_b, tau_b_cl, tau_star, tau_star_rule, val, valtz};
+    use crate::syntax_tree::{asp::mini_gringo_cl as asp, fol::sigma_0 as fol};
+    use indexmap::IndexSet;
+
+    #[test]
+    fn test_val() {
+        for (term, var, target) in [
+            (
+                "X + 1",
+                "Z1",
+                "exists I$i J$i (Z1$g = I$i + J$i and I$i = X and J$i = 1)",
+            ),
+            (
+                "3 - 5",
+                "Z1",
+                "exists I$i J$i (Z1$g = I$i - J$i and I$i = 3 and J$i = 5)",
+            ),
+            (
+                "Xanadu/Yak",
+                "Z1",
+                "exists I$i J$i K$i (I$i = Xanadu and J$i = Yak and K$i * |J$i| <= |I$i| < (K$i + 1) * |J$i| and ((I$i * J$i >= 0 and Z1 = K$i) or (I$i * J$i < 0 and Z1 = -K$i)))",
+            ),
+            (
+                "X \\ 3",
+                "Z1",
+                "exists I$i J$i K$i (I$i = X and J$i = 3 and K$i * |J$i| <= |I$i| < (K$i + 1) * |J$i| and ((I$i * J$i >= 0 and Z1 = I$i - K$i * J$i) or (I$i * J$i < 0 and Z1 = I$i + K$i * J$i)))",
+            ),
+            (
+                "X..Y",
+                "Z",
+                "exists I$i J$i K$i (I$i = X and J$i = Y and Z$g = K$i and I$i <= K$i <= J$i)",
+            ),
+            (
+                "X+1..Y",
+                "Z1",
+                "exists I$i J$i K$i ((exists I1$i J1$i (I$i = I1$i + J1$i and I1$i = X and J1$i = 1)) and J$i = Y and Z1 = K$i and I$i <= K$i <= J$i)",
+            ),
+        ] {
+            let left = val(term.parse().unwrap(), var.parse().unwrap(), IndexSet::new());
+            let right = target.parse().unwrap();
+
+            assert!(
+                left == right,
+                "assertion `left == right` failed:\n left:\n{left}\n right:\n{right}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_valtz() {
+        for (term, var, target) in [
+            (
+                "X + 1",
+                "Z1",
+                "exists I$i J$i (Z1$g = I$i + J$i and I$i = X and J$i = 1)",
+            ),
+            (
+                "3 - (1..5)",
+                "Z1",
+                "exists I$i J$i (Z1$g = I$i - J$i and I$i = 3 and exists I1$i J1$i K1$i (I1$i = 1 and J1$i = 5 and J$i = K1$i and I1$i <= K1$i <= J1$i))",
+            ),
+        ] {
+            let left = valtz(vec![term.parse().unwrap()], vec![var.parse().unwrap()]);
+            let right = target.parse().unwrap();
+
+            assert!(
+                left == right,
+                "assertion `left == right` failed:\n left:\n{left}\n right:\n{right}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tau_b() {
+        for (src, target) in [
+            ("p(t)", "exists Z (Z = t and p(Z))"),
+            ("not p(t)", "exists Z (Z = t and not p(Z))"),
+            (
+                "X < 1..5",
+                "exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = 1 and J$i = 5 and Z1 = K$i and I$i <= K$i <= J$i) and Z < Z1)",
+            ),
+            ("not not p(t)", "exists Z (Z = t and not not p(Z))"),
+            ("not not x", "not not x"),
+            (
+                "not p(X,5)",
+                "exists Z Z1 (Z = X and Z1 = 5 and not p(Z,Z1))",
+            ),
+            (
+                "not p(X,0-5)",
+                "exists Z Z1 (Z = X and exists I$i J$i (Z1 = I$i - J$i and I$i = 0 and J$i = 5) and not p(Z,Z1))",
+            ),
+            (
+                "p(X,-1..5)",
+                "exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = -1 and J$i = 5 and Z1 = K$i and I$i <= K$i <= J$i) and p(Z,Z1))",
+            ),
+            (
+                "p(X,-(1..5))",
+                "exists Z Z1 (Z = X and exists I$i J$i (Z1 = I$i - J$i and I$i = 0 and exists I1$i J1$i K1$i (I1$i = 1 and J1$i = 5  and J$i = K1$i and I1$i <= K1$i <= J1$i)) and p(Z,Z1))",
+            ),
+            (
+                "p(1/0)",
+                "exists Z (exists I$i J$i K$i (I$i = 1 and J$i = 0 and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and p(Z))",
+            ),
+        ] {
+            let left = tau_b(src.parse().unwrap());
+            let right = target.parse().unwrap();
+
+            assert!(
+                left == right,
+                "assertion `left == right` failed:\n left:\n{left}\n right:\n{right}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tau_b_cl() {
+        for (src, target) in [
+            (
+                (
+                    "q(X)",
+                    IndexSet::from_iter(vec![asp::Variable("X".to_string())]),
+                ),
+                "exists Z (Z = X and q(Z))",
+            ),
+            (
+                (
+                    "not asg(V,I) : color(I)",
+                    IndexSet::from_iter(vec![asp::Variable("V".to_string())]),
+                ),
+                "forall I (exists Z (Z = I and color(Z)) -> exists Z Z1 (Z = V and Z1 = I and not asg(Z, Z1)))",
+            ),
+            (
+                (
+                    "#false : p(X,Y), q(Y)",
+                    IndexSet::from_iter(vec![
+                        asp::Variable("X".to_string()),
+                        asp::Variable("Y".to_string()),
+                    ]),
+                ),
+                "(exists Z Z1 (Z = X and Z1 = Y and p(Z,Z1)) and exists Z (Z = Y and q(Z))) -> #false",
+            ),
+            (
+                (
+                    "not p(Z) : p(Z), X < Z, Z < Y",
+                    IndexSet::from_iter(vec![
+                        asp::Variable("X".to_string()),
+                        asp::Variable("Y".to_string()),
+                    ]),
+                ),
+                "forall Z ((exists Z1 (Z1 = Z and p(Z1)) and exists Z1 Z2 (Z1 = X and Z2 = Z and Z1 < Z2) and exists Z1 Z2 (Z1 = Z and Z2 = Y and Z1 < Z2)) -> exists Z1 (Z1 = Z and not p(Z1)) )",
+            ),
+            (
+                (
+                    "#false : p(Z), X < Z, Z < Y",
+                    IndexSet::from_iter(vec![
+                        asp::Variable("X".to_string()),
+                        asp::Variable("Y".to_string()),
+                    ]),
+                ),
+                "forall Z ((exists Z1 (Z1 = Z and p(Z1)) and exists Z1 Z2 (Z1 = X and Z2 = Z and Z1 < Z2) and exists Z1 Z2 (Z1 = Z and Z2 = Y and Z1 < Z2)) -> #false )",
+            ),
+            (
+                (
+                    "p(X,Y) : not q(X/Y)",
+                    IndexSet::from_iter(vec![asp::Variable("X".to_string())]),
+                ),
+                "forall Y (exists Z (exists I$i J$i K$i (I$i = X and J$i = Y and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and not q(Z)) -> exists Z Z1 (Z = X and Z1 = Y and p(Z, Z1)))",
+            ),
+        ] {
+            let src = tau_b_cl(src.0.parse().unwrap(), &src.1);
+            let target = target.parse().unwrap();
+            assert_eq!(src, target, "{src} !=\n {target}")
+        }
+    }
+
+    #[test]
+    fn test_tau_star_rule() {
+        for (src, target) in [
+            (
+                ("p(X) :- q(X,Y) : t(Y).", vec!["V".to_string()]),
+                "forall V X (V = X and forall Y (exists Z (Z = Y and t(Z)) -> exists Z Z1 (Z = X and Z1 = Y and q(Z, Z1))) -> p(V))",
+            ),
+            (
+                ("p(X) :- q(X,Y) : t(Y), 1 < X; t(X).", vec!["V".to_string()]),
+                "forall V X (V = X and (forall Y (exists Z (Z = Y and t(Z)) and exists Z Z1 (Z = 1 and Z1 = X and Z < Z1) -> exists Z Z1 (Z = X and Z1 = Y and q(Z, Z1))) and exists Z (Z = X and t(Z))) -> p(V))",
+            ),
+            (
+                ("p(X) :- q(X,Y) : t(Y), 1 < X, t(X).", vec!["V".to_string()]),
+                "forall V X (V = X and (forall Y (exists Z (Z = Y and t(Z)) and exists Z Z1 (Z = 1 and Z1 = X and Z < Z1) and exists Z (Z = X and t(Z)) -> exists Z Z1 (Z = X and Z1 = Y and q(Z, Z1)))) -> p(V))",
+            ),
+            (
+                ("p(X) :- q(X), t(X).", vec!["V".to_string()]),
+                "forall V X (V = X and (exists Z (Z = X and q(Z)) and exists Z (Z = X and t(Z))) -> p(V))",
+            ),
+            (
+                ("p(X) :- q(X); t(X).", vec!["V".to_string()]),
+                "forall V X (V = X and (exists Z (Z = X and q(Z)) and exists Z (Z = X and t(Z))) -> p(V))",
+            ),
+            (
+                ("p :- q(X).", vec![]),
+                "forall X ( exists Z (Z = X and q(Z)) -> p)",
+            ),
+            (("p :- q : t; r.", vec![]), "((t -> q) and r) -> p"),
+            (("p :- q : t, r.", vec![]), "(t and r -> q) -> p"),
+            (("p :- s, q : t, r.", vec![]), "(s and (t and r -> q)) -> p"),
+            (("p :- s; q : t, r.", vec![]), "(s and (t and r -> q)) -> p"),
+            (
+                ("p :- s; not not q : t, not r.", vec![]),
+                "(s and (t and not r -> not not q)) -> p",
+            ),
+            (
+                (
+                    "sort(X,Y) :- p(X); p(Y); not p(Z) : p(Z), X < Z, Z < Y.",
+                    vec!["V1".to_string(), "V2".to_string()],
+                ),
+                "forall V1 V2 X Y ( (V1 = X and V2 = Y and (exists Z (Z = X and p(Z)) and exists Z (Z = Y and p(Z)) and forall Z ((exists Z1 (Z1 = Z and p(Z1)) and exists Z1 Z2 (Z1 = X and Z2 = Z and Z1 < Z2) and exists Z1 Z2 (Z1 = Z and Z2 = Y and Z1 < Z2)) -> exists Z1 (Z1 = Z and not p(Z1)) ))) -> sort(V1,V2))",
+            ),
+        ] {
+            let rule: asp::Rule = src.0.parse().unwrap();
+            let src = fol::Theory {
+                formulas: vec![tau_star_rule(rule, &src.1)],
+            };
+            let target = fol::Theory {
+                formulas: vec![target.parse().unwrap()],
+            };
+            assert_eq!(src, target, "{src} != {target}")
+        }
+    }
+
+    #[test]
+    fn test_tau_star() {
+        for (src, target) in [
+            ("a:- b. a :- c.", "b -> a. c -> a."),
+            (
+                "p(a). p(b). q(X, Y) :- p(X), p(Y).",
+                "forall V1 (V1 = a -> p(V1)). forall V1 (V1 = b -> p(V1)). forall V1 V2 X Y (V1 = X and V2 = Y and (exists Z (Z = X and p(Z)) and exists Z (Z = Y and p(Z))) -> q(V1,V2)).",
+            ),
+            ("p.", "#true -> p."),
+            ("q :- not p.", "not p -> q."),
+            (
+                "{q(X)} :- p(X).",
+                "forall V1 X (V1 = X and exists Z (Z = X and p(Z)) and not not q(V1) -> q(V1)).",
+            ),
+            (
+                "{q(V)} :- p(V).",
+                "forall V V1 (V1 = V and exists Z (Z = V and p(Z)) and not not q(V1) -> q(V1)).",
+            ),
+            (
+                "{q(V+1)} :- p(V), not q(X).",
+                "forall V V1 X (exists I$i J$i (V1 = I$i + J$i and I$i = V and J$i = 1) and (exists Z (Z = V and p(Z)) and exists Z (Z = X and not q(Z))) and not not q(V1) -> q(V1)).",
+            ),
+            (
+                ":- p(X,3), not q(X,a).",
+                "forall X (exists Z Z1 (Z = X and Z1 = 3 and p(Z,Z1)) and exists Z Z1 (Z = X and Z1 = a and not q(Z,Z1)) -> #false).",
+            ),
+            (":- p.", "p -> #false."),
+            ("{p} :- q.", "q and not not p -> p."),
+            ("{p}.", "not not p -> p."),
+            ("{p(5)}.", "forall V1 (V1 = 5 and not not p(V1) -> p(V1))."),
+            ("p. q.", "#true -> p. #true -> q."),
+            (
+                "{ra(X,a)} :- ta(X). ra(5,a).",
+                "forall V1 V2 X (V1 = X and V2 = a and exists Z (Z = X and ta(Z)) and not not ra(V1, V2) -> ra(V1, V2)). forall V1 V2 (V1 = 5 and V2 = a -> ra(V1, V2)).",
+            ),
+            (
+                "p :- X = 1..3 : q(X).",
+                "forall X (exists Z (Z = X and q(Z)) -> exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = 1 and J$i = 3 and Z1 = K$i and I$i <= K$i <= J$i) and Z = Z1)) -> p.",
+            ),
+            (
+                "r(X) :- p(X,Y) : q(X,Y).",
+                "forall V1 X (V1 = X and forall Y (exists Z Z1 (Z = X and Z1 = Y and q(Z, Z1)) -> exists Z Z1 (Z = X and Z1 = Y and p(Z, Z1))) -> r(V1)).",
+            ),
+        ] {
+            let left = tau_star(src.parse().unwrap());
+            let right = target.parse().unwrap();
+
+            assert!(
+                left == right,
+                "assertion `left == right` failed:\n left:\n{left}\n right:\n{right}"
+            );
+        }
     }
 }

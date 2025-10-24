@@ -964,7 +964,7 @@ mod tests {
             ), // Inspired by Tiling example
             (
                 "{ place(X,Y, T) } :- X = 1..10, Y = 1..10, T = 1..3.",
-                "forall X$i Y$i T$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
             ), // Inspired by Tiling
         ] {
             let rule = source.parse().unwrap();
