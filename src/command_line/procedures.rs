@@ -245,7 +245,6 @@ pub fn main() -> Result<()> {
             equivalence,
             decomposition,
             direction,
-            formula_representation,
             bypass_tightness,
             no_simplify,
             no_eq_break,
@@ -265,19 +264,18 @@ pub fn main() -> Result<()> {
 
             let problems = match equivalence {
                 Equivalence::Strong => match dialect {
-                    Dialect::MiniGringo => StrongEquivalenceTask {
-                        left: asp::mini_gringo::Program::from_file(
+                    Dialect::MiniGringoCL => StrongEquivalenceTask {
+                        left: asp::mini_gringo_cl::Program::from_file(
                             files
                                 .left()
                                 .ok_or(anyhow!("no left program was provided"))?,
                         )?,
-                        right: asp::mini_gringo::Program::from_file(
+                        right: asp::mini_gringo_cl::Program::from_file(
                             files
                                 .right()
                                 .ok_or(anyhow!("no right program was provided"))?,
                         )?,
                         decomposition,
-                        formula_representation,
                         direction,
                         simplify: !no_simplify,
                         break_equivalences: !no_eq_break,
@@ -285,23 +283,45 @@ pub fn main() -> Result<()> {
                     .decompose()?
                     .report_warnings(),
 
-                    Dialect::MiniGringoCL => todo!(),
+                    Dialect::MiniGringo => {
+                        let left = asp::mini_gringo::Program::from_file(
+                            files
+                                .left()
+                                .ok_or(anyhow!("no left program was provided"))?,
+                        )?;
+                        let right = asp::mini_gringo::Program::from_file(
+                            files
+                                .right()
+                                .ok_or(anyhow!("no right program was provided"))?,
+                        )?;
+
+                        StrongEquivalenceTask {
+                            left: left.into(),
+                            right: right.into(),
+                            decomposition,
+                            direction,
+                            simplify: !no_simplify,
+                            break_equivalences: !no_eq_break,
+                        }
+                        .decompose()?
+                        .report_warnings()
+                    }
                 },
 
                 Equivalence::External => match dialect {
-                    Dialect::MiniGringo => ExternalEquivalenceTask {
+                    Dialect::MiniGringoCL => ExternalEquivalenceTask {
                         specification: match files
                             .specification()
                             .ok_or(anyhow!("no specification was provided"))?
                         {
                             Either::Left(program) => {
-                                Either::Left(asp::mini_gringo::Program::from_file(program)?)
+                                Either::Left(asp::mini_gringo_cl::Program::from_file(program)?)
                             }
                             Either::Right(specification) => {
                                 Either::Right(fol::Specification::from_file(specification)?)
                             }
                         },
-                        program: asp::mini_gringo::Program::from_file(
+                        program: asp::mini_gringo_cl::Program::from_file(
                             files.program().ok_or(anyhow!("no program was provided"))?,
                         )?,
                         user_guide: fol::UserGuide::from_file(
@@ -314,7 +334,6 @@ pub fn main() -> Result<()> {
                             .map(fol::Specification::from_file)
                             .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
                         decomposition,
-                        formula_representation,
                         direction,
                         bypass_tightness,
                         simplify: !no_simplify,
@@ -323,7 +342,45 @@ pub fn main() -> Result<()> {
                     .decompose()?
                     .report_warnings(),
 
-                    Dialect::MiniGringoCL => todo!(),
+                    Dialect::MiniGringo => {
+                        let specification = match files
+                            .specification()
+                            .ok_or(anyhow!("no specification was provided"))?
+                        {
+                            Either::Left(program) => {
+                                let program = asp::mini_gringo::Program::from_file(program)?;
+                                Either::Left(program.into())
+                            }
+                            Either::Right(specification) => {
+                                Either::Right(fol::Specification::from_file(specification)?)
+                            }
+                        };
+
+                        let program = asp::mini_gringo::Program::from_file(
+                            files.program().ok_or(anyhow!("no program was provided"))?,
+                        )?;
+
+                        ExternalEquivalenceTask {
+                            specification: specification.into(),
+                            program: program.into(),
+                            user_guide: fol::UserGuide::from_file(
+                                files
+                                    .user_guide()
+                                    .ok_or(anyhow!("no user guide was provided"))?,
+                            )?,
+                            proof_outline: files
+                                .proof_outline()
+                                .map(fol::Specification::from_file)
+                                .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                            decomposition,
+                            direction,
+                            bypass_tightness,
+                            simplify: !no_simplify,
+                            break_equivalences: !no_eq_break,
+                        }
+                        .decompose()?
+                        .report_warnings()
+                    }
                 },
             };
 

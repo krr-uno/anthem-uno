@@ -13,9 +13,10 @@ use {
         },
         syntax_tree::{
             GenericPredicate,
-            asp::mini_gringo as asp,
+            asp::{mini_gringo, mini_gringo_cl},
             fol::sigma_0::{self as fol, Quantification, Quantifier},
         },
+        translating::formula_representation::tau_star::TauStar,
     },
     indexmap::IndexSet,
     petgraph::{
@@ -180,7 +181,7 @@ pub trait Tightness {
     fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool;
 }
 
-impl Tightness for asp::Program {
+impl Tightness for mini_gringo::Program {
     fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
         // TODO: is this check necessary?
         let program_predicates: IndexSet<GenericPredicate> =
@@ -193,7 +194,10 @@ impl Tightness for asp::Program {
         let mut dependency_graph = DiGraph::<(), ()>::new();
         let mut mapping = HashMap::new();
 
-        for predicate in intensional_predicates.into_iter().map(asp::Predicate::from) {
+        for predicate in intensional_predicates
+            .into_iter()
+            .map(mini_gringo::Predicate::from)
+        {
             let node = dependency_graph.add_node(());
             mapping.insert(predicate, node);
         }
@@ -211,6 +215,12 @@ impl Tightness for asp::Program {
         }
 
         !is_cyclic_directed(&dependency_graph)
+    }
+}
+
+impl Tightness for mini_gringo_cl::Program {
+    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
+        self.clone().tau_star().is_tight(intensional_predicates)
     }
 }
 

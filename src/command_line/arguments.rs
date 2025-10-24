@@ -82,10 +82,6 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         direction: Direction,
 
-        /// The ASP-to-target-language translation to use
-        #[arg(long, value_enum, default_value_t)]
-        formula_representation: FormulaRepresentation,
-
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
         bypass_tightness: bool,

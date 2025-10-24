@@ -298,6 +298,15 @@ impl From<crate::syntax_tree::asp::mini_gringo::Predicate> for Predicate {
     }
 }
 
+impl From<crate::syntax_tree::asp::mini_gringo_cl::Predicate> for Predicate {
+    fn from(value: crate::syntax_tree::asp::mini_gringo_cl::Predicate) -> Self {
+        Predicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
 impl From<GenericPredicate> for Predicate {
     fn from(value: GenericPredicate) -> Self {
         Predicate {

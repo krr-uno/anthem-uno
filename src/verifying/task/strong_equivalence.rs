@@ -1,16 +1,16 @@
 use {
     crate::{
-        command_line::arguments::{Decomposition, FormulaRepresentation},
+        command_line::arguments::Decomposition,
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        syntax_tree::{GenericPredicate, asp::mini_gringo_cl as asp, fol::sigma_0 as fol},
         translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
-            formula_representation::{mu::Mu as _, tau_star::TauStar as _},
+            formula_representation::tau_star::TauStar,
         },
         verifying::{
             problem::{AnnotatedFormula, Problem, Role},
@@ -29,7 +29,6 @@ pub struct StrongEquivalenceTask {
     pub right: asp::Program,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
-    pub formula_representation: FormulaRepresentation,
     pub simplify: bool,
     pub break_equivalences: bool,
 }
@@ -37,7 +36,7 @@ pub struct StrongEquivalenceTask {
 impl StrongEquivalenceTask {
     fn transition_axioms(&self) -> fol::Theory {
         fn transition(p: asp::Predicate) -> fol::Formula {
-            let p: fol::Predicate = p.into();
+            let p: fol::Predicate = GenericPredicate::from(p).into();
 
             let hp = p.clone().to_formula().here();
             let tp = p.to_formula().there();
@@ -68,15 +67,8 @@ impl Task for StrongEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
 
-        let mut left = match self.formula_representation {
-            FormulaRepresentation::Mu => self.left.mu(),
-            FormulaRepresentation::TauStar => self.left.tau_star(),
-        };
-
-        let mut right = match self.formula_representation {
-            FormulaRepresentation::Mu => self.right.mu(),
-            FormulaRepresentation::TauStar => self.right.tau_star(),
-        };
+        let mut left = self.left.tau_star();
+        let mut right = self.right.tau_star();
 
         if self.simplify {
             let mut portfolio = [INTUITIONISTIC, HT].concat().into_iter().compose();
