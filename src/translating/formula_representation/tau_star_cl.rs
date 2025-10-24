@@ -7,14 +7,15 @@ use {
             remove_identities, remove_orphaned_variables,
         },
         syntax_tree::{
-            asp::mini_gringo_cl::{self as asp, BodyLiteral, ConditionalHead},
+            asp::mini_gringo_cl as asp,
             fol::sigma_0::{
-                Atom, AtomicFormula, BinaryConnective, Comparison, Formula, GeneralTerm, Guard,
-                Quantification, Quantifier, Relation, Sort, Theory, UnaryConnective, Variable,
+                Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula,
+                GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation, Sort,
+                SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
             },
         },
     },
-    indexmap::IndexSet,
+    indexmap::{IndexMap, IndexSet},
 };
 
 pub const PREPROCESS: &[fn(Formula) -> Formula] = &[
@@ -37,160 +38,501 @@ fn choose_fresh_global_variables(program: &asp::Program) -> Vec<String> {
     program.choose_fresh_variables("V", max_arity)
 }
 
-// // |t|
-// // exists I$ (Z = I$ & val_t(I$))
-// fn construct_absolute_value_formula(
-//     valti: Formula,
-//     i_var: fol::Variable,
-//     z: fol::Variable,
-// ) -> Formula {
-//     let z_var_term = variable_to_general_term(z);
+fn choose_fresh_ijk(taken_variables: IndexSet<Variable>) -> IndexMap<String, Variable> {
+    let mut fresh_int_vars = IndexMap::new();
 
-//     // Z = |I|
-//     let zequals = Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
-//         term: z_var_term,
-//         guards: vec![fol::Guard {
-//             relation: fol::Relation::Equal,
-//             term: GeneralTerm::IntegerTerm(fol::IntegerTerm::UnaryOperation {
-//                 op: fol::UnaryOperator::AbsoluteValue,
-//                 arg: fol::IntegerTerm::Variable(i_var.name.clone()).into(),
-//             }),
-//         }],
-//     }));
+    fresh_int_vars.insert(
+        "I".to_string(),
+        Variable {
+            name: taken_variables.choose_fresh_variable("I"),
+            sort: Sort::Integer,
+        },
+    );
+    fresh_int_vars.insert(
+        "J".to_string(),
+        Variable {
+            name: taken_variables.choose_fresh_variable("J"),
+            sort: Sort::Integer,
+        },
+    );
+    fresh_int_vars.insert(
+        "K".to_string(),
+        Variable {
+            name: taken_variables.choose_fresh_variable("K"),
+            sort: Sort::Integer,
+        },
+    );
 
-//     Formula::QuantifiedFormula {
-//         quantification: fol::Quantification {
-//             quantifier: fol::Quantifier::Exists,
-//             variables: vec![i_var],
-//         },
-//         formula: Formula::BinaryFormula {
-//             connective: fol::BinaryConnective::Conjunction,
-//             lhs: zequals.into(),
-//             rhs: valti.into(),
-//         }
-//         .into(),
-//     }
-// }
+    fresh_int_vars
+}
 
-// // Translate a first-order body literal
-// fn tau_b_first_order_literal(
-//     l: asp::Literal,
-//     taken_vars: &mut IndexSet<fol::Variable>,
-// ) -> Formula {
-//     let atom = l.atom;
-//     let terms = atom.terms;
-//     let arity = terms.len();
-//     let varnames = choose_fresh_variable_names(taken_vars, "Z", arity);
+// Z = t
+fn construct_equality_formula(term: asp::Term, z: Variable) -> Formula {
+    let rhs = match term {
+        asp::Term::PrecomputedTerm(t) => match t {
+            asp::PrecomputedTerm::Infimum => GeneralTerm::Infimum,
+            asp::PrecomputedTerm::Supremum => GeneralTerm::Supremum,
+            asp::PrecomputedTerm::Numeral(i) => GeneralTerm::IntegerTerm(IntegerTerm::Numeral(i)),
+            asp::PrecomputedTerm::Symbol(s) => GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol(s)),
+        },
+        asp::Term::Variable(v) => GeneralTerm::Variable(v.0),
+        _ => unreachable!(
+            "equality should be between two variables or a variable and a precomputed term"
+        ),
+    };
 
-//     // Compute val_t1(Z1) & val_t2(Z2) & ... & val_tk(Zk)
-//     let mut var_terms: Vec<GeneralTerm> = Vec::with_capacity(arity);
-//     let mut var_vars: Vec<fol::Variable> = Vec::with_capacity(arity);
-//     let mut valtz_vec: Vec<Formula> = Vec::with_capacity(arity);
-//     for (i, t) in terms.iter().enumerate() {
-//         let var = fol::Variable {
-//             sort: fol::Sort::General,
-//             name: varnames[i].clone(),
-//         };
-//         var_terms.push(GeneralTerm::Variable(varnames[i].clone()));
-//         var_vars.push(var.clone());
-//         valtz_vec.push(val_agc::val(t.clone(), var, taken_vars.clone()));
-//     }
-//     let valtz = Formula::conjoin(valtz_vec);
+    Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: rhs,
+        }],
+    }))
+}
 
-//     // Compute p(Z1, Z2, ..., Zk)
-//     let p_zk = Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-//         predicate_symbol: atom.predicate_symbol,
-//         terms: var_terms,
-//     }));
+// op: +,-,*
+// exists I J (Z = I op J & val_t1(I) & val_t2(J))
+fn construct_total_function_formula(
+    valti: Formula,
+    valtj: Formula,
+    binop: asp::BinaryOperator,
+    i_var: Variable,
+    j_var: Variable,
+    z: Variable,
+) -> Formula {
+    // Z = I binop J
+    let zequals = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+                op: match binop {
+                    asp::BinaryOperator::Add => BinaryOperator::Add,
+                    asp::BinaryOperator::Subtract => BinaryOperator::Subtract,
+                    asp::BinaryOperator::Multiply => BinaryOperator::Multiply,
+                    _ => unreachable!(
+                        "addition, subtraction and multiplication are the only supported total functions"
+                    ),
+                },
+                lhs: IntegerTerm::Variable(i_var.name.clone()).into(),
+                rhs: IntegerTerm::Variable(j_var.name.clone()).into(),
+            }),
+        }],
+    }));
+    Formula::QuantifiedFormula {
+        quantification: Quantification {
+            quantifier: Quantifier::Exists,
+            variables: vec![i_var, j_var],
+        },
+        formula: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: Formula::BinaryFormula {
+                connective: BinaryConnective::Conjunction,
+                lhs: zequals.into(),
+                rhs: valti.into(),
+            }
+            .into(),
+            rhs: valtj.into(),
+        }
+        .into(),
+    }
+}
 
-//     // Compute tau^b(B)
-//     match l.sign {
-//         asp::Sign::NoSign => Formula::QuantifiedFormula {
-//             quantification: fol::Quantification {
-//                 quantifier: fol::Quantifier::Exists,
-//                 variables: var_vars,
-//             },
-//             formula: Formula::BinaryFormula {
-//                 connective: fol::BinaryConnective::Conjunction,
-//                 lhs: valtz.into(),
-//                 rhs: p_zk.into(),
-//             }
-//             .into(),
-//         },
-//         asp::Sign::Negation => Formula::QuantifiedFormula {
-//             quantification: fol::Quantification {
-//                 quantifier: fol::Quantifier::Exists,
-//                 variables: var_vars,
-//             },
-//             formula: Formula::BinaryFormula {
-//                 connective: fol::BinaryConnective::Conjunction,
-//                 lhs: valtz.into(),
-//                 rhs: Formula::UnaryFormula {
-//                     connective: fol::UnaryConnective::Negation,
-//                     formula: p_zk.into(),
-//                 }
-//                 .into(),
-//             }
-//             .into(),
-//         },
-//         asp::Sign::DoubleNegation => Formula::QuantifiedFormula {
-//             quantification: fol::Quantification {
-//                 quantifier: fol::Quantifier::Exists,
-//                 variables: var_vars,
-//             },
-//             formula: Formula::BinaryFormula {
-//                 connective: fol::BinaryConnective::Conjunction,
-//                 lhs: valtz.into(),
-//                 rhs: Formula::UnaryFormula {
-//                     connective: fol::UnaryConnective::Negation,
-//                     formula: Formula::UnaryFormula {
-//                         connective: fol::UnaryConnective::Negation,
-//                         formula: p_zk.into(),
-//                     }
-//                     .into(),
-//                 }
-//                 .into(),
-//             }
-//             .into(),
-//         },
-//     }
-// }
+// t1..t2
+// exists I J K (val_t1(I) & val_t2(J) & I <= K <= J & Z = K)
+fn construct_interval_formula(
+    valti: Formula,
+    valtj: Formula,
+    i_var: Variable,
+    j_var: Variable,
+    k_var: Variable,
+    z: Variable,
+) -> Formula {
+    // I <= K <= J
+    let range = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: GeneralTerm::IntegerTerm(IntegerTerm::Variable(i_var.name.clone())),
+        guards: vec![
+            Guard {
+                relation: Relation::LessEqual,
+                term: GeneralTerm::IntegerTerm(IntegerTerm::Variable(k_var.name.clone())),
+            },
+            Guard {
+                relation: Relation::LessEqual,
+                term: GeneralTerm::IntegerTerm(IntegerTerm::Variable(j_var.name.clone())),
+            },
+        ],
+    }));
 
-// Translate a propositional body literal
-// fn tau_b_propositional_literal(l: asp::Literal) -> Formula {
-//     let atom = l.atom;
-//     match l.sign {
-//         asp::Sign::NoSign => Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-//             predicate_symbol: atom.predicate_symbol,
+    // val_t1(I) & val_t2(J) & Z = k
+    let subformula = Formula::BinaryFormula {
+        connective: BinaryConnective::Conjunction,
+        lhs: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: valti.into(),
+            rhs: valtj.into(),
+        }
+        .into(),
+        rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+            term: z.into(),
+            guards: vec![Guard {
+                relation: Relation::Equal,
+                term: GeneralTerm::IntegerTerm(IntegerTerm::Variable(k_var.name.clone())),
+            }],
+        }))
+        .into(),
+    };
 
-//             terms: vec![],
-//         })),
-//         asp::Sign::Negation => Formula::UnaryFormula {
-//             connective: fol::UnaryConnective::Negation,
-//             formula: Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-//                 predicate_symbol: atom.predicate_symbol,
-//                 terms: vec![],
-//             }))
-//             .into(),
-//         },
-//         asp::Sign::DoubleNegation => Formula::UnaryFormula {
-//             connective: fol::UnaryConnective::Negation,
-//             formula: Formula::UnaryFormula {
-//                 connective: fol::UnaryConnective::Negation,
-//                 formula: Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-//                     predicate_symbol: atom.predicate_symbol,
-//                     terms: vec![],
-//                 }))
-//                 .into(),
-//             }
-//             .into(),
-//         },
-//     }
-// }
+    Formula::QuantifiedFormula {
+        quantification: Quantification {
+            quantifier: Quantifier::Exists,
+            variables: vec![i_var, j_var, k_var],
+        },
+        formula: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: subformula.into(),
+            rhs: range.into(),
+        }
+        .into(),
+    }
+}
+
+// |t|
+// exists I$ (Z = I$ & val_t(I$))
+fn construct_absolute_value_formula(valti: Formula, i_var: Variable, z: Variable) -> Formula {
+    // Z = |I|
+    let zequals = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::UnaryOperation {
+                op: UnaryOperator::AbsoluteValue,
+                arg: IntegerTerm::Variable(i_var.name.clone()).into(),
+            }),
+        }],
+    }));
+
+    Formula::QuantifiedFormula {
+        quantification: Quantification {
+            quantifier: Quantifier::Exists,
+            variables: vec![i_var],
+        },
+        formula: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: zequals.into(),
+            rhs: valti.into(),
+        }
+        .into(),
+    }
+}
+
+// I,J,K must be integer variables
+// f1: K * |J| <= |I| < (K+1) * |J|
+fn division_helper_f1(i: Variable, j: Variable, k: Variable) -> Formula {
+    // K * |J|
+    let term1 = GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+        op: BinaryOperator::Multiply,
+        lhs: IntegerTerm::Variable(k.name.clone()).into(),
+        rhs: IntegerTerm::UnaryOperation {
+            op: UnaryOperator::AbsoluteValue,
+            arg: IntegerTerm::Variable(j.name.clone()).into(),
+        }
+        .into(),
+    });
+
+    // |I|
+    let term2 = GeneralTerm::IntegerTerm(IntegerTerm::UnaryOperation {
+        op: UnaryOperator::AbsoluteValue,
+        arg: IntegerTerm::Variable(i.name.clone()).into(),
+    });
+
+    // (K+1) * |J|
+    let term3 = GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+        op: BinaryOperator::Multiply,
+        lhs: IntegerTerm::BinaryOperation {
+            op: BinaryOperator::Add,
+            lhs: IntegerTerm::Variable(k.name.clone()).into(),
+            rhs: IntegerTerm::Numeral(1).into(),
+        }
+        .into(),
+        rhs: IntegerTerm::UnaryOperation {
+            op: UnaryOperator::AbsoluteValue,
+            arg: IntegerTerm::Variable(j.name.clone()).into(),
+        }
+        .into(),
+    });
+
+    Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: term1,
+        guards: vec![
+            Guard {
+                relation: Relation::LessEqual,
+                term: term2,
+            },
+            Guard {
+                relation: Relation::Less,
+                term: term3,
+            },
+        ],
+    }))
+}
+
+// f2: (I * J >= 0 & Z = K) v (I * J < 0 & Z = -K)
+fn division_helper_f2(
+    i: Variable, // Must be an integer variable
+    j: Variable, // Must be an integer variable
+    k: Variable, // Must be an integer variable
+    z: Variable, // Must be a general variable
+) -> Formula {
+    // I * J
+    let i_times_j = GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+        op: BinaryOperator::Multiply,
+        lhs: IntegerTerm::Variable(i.name.clone()).into(),
+        rhs: IntegerTerm::Variable(j.name.clone()).into(),
+    });
+
+    // I * J >= 0
+    let ij_geq_zero = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: i_times_j.clone(),
+        guards: vec![Guard {
+            relation: Relation::GreaterEqual,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::Numeral(0)),
+        }],
+    }));
+
+    // Z = K
+    let z_equals_k = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.clone().into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::Variable(k.name.clone())),
+        }],
+    }));
+
+    // I * J < 0
+    let ij_less_zero = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: i_times_j,
+        guards: vec![Guard {
+            relation: Relation::Less,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::Numeral(0)),
+        }],
+    }));
+
+    // Z = -K
+    let z_equals_neg_k = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::UnaryOperation {
+                op: UnaryOperator::Negative,
+                arg: IntegerTerm::Variable(k.name).into(),
+            }),
+        }],
+    }));
+
+    Formula::BinaryFormula {
+        connective: BinaryConnective::Disjunction,
+        lhs: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: ij_geq_zero.into(),
+            rhs: z_equals_k.into(),
+        }
+        .into(),
+        rhs: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: ij_less_zero.into(),
+            rhs: z_equals_neg_k.into(),
+        }
+        .into(),
+    }
+}
+
+// Arguments must be integer variables
+// f3: (I * J >= 0 & Z = I - K * J) v (I * J < 0 & Z = I + K * J)
+fn division_helper_f3(i: Variable, j: Variable, k: Variable, z: Variable) -> Formula {
+    // I * J
+    let i_times_j = GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+        op: BinaryOperator::Multiply,
+        lhs: IntegerTerm::Variable(i.name.clone()).into(),
+        rhs: IntegerTerm::Variable(j.name.clone()).into(),
+    });
+
+    // I * J >= 0
+    let ij_geq_zero = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: i_times_j.clone(),
+        guards: vec![Guard {
+            relation: Relation::GreaterEqual,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::Numeral(0)),
+        }],
+    }));
+
+    // I * J < 0
+    let ij_less_zero = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: i_times_j,
+        guards: vec![Guard {
+            relation: Relation::Less,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::Numeral(0)),
+        }],
+    }));
+
+    // K * J
+    let k_times_j = IntegerTerm::BinaryOperation {
+        op: BinaryOperator::Multiply,
+        lhs: IntegerTerm::Variable(k.name.clone()).into(),
+        rhs: IntegerTerm::Variable(j.name.clone()).into(),
+    };
+
+    // Z = I - K * J
+    let z_equals_i_minus = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.clone().into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+                op: BinaryOperator::Subtract,
+                lhs: IntegerTerm::Variable(i.name.clone()).into(),
+                rhs: k_times_j.clone().into(),
+            }),
+        }],
+    }));
+
+    // Z = I + K * J
+    let z_equals_i_plus = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: z.into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+                op: BinaryOperator::Add,
+                lhs: IntegerTerm::Variable(i.name.clone()).into(),
+                rhs: k_times_j.into(),
+            }),
+        }],
+    }));
+
+    Formula::BinaryFormula {
+        connective: BinaryConnective::Disjunction,
+        lhs: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: ij_geq_zero.into(),
+            rhs: z_equals_i_minus.into(),
+        }
+        .into(),
+        rhs: Formula::BinaryFormula {
+            connective: BinaryConnective::Conjunction,
+            lhs: ij_less_zero.into(),
+            rhs: z_equals_i_plus.into(),
+        }
+        .into(),
+    }
+}
+
+// Abstract Gringo compliant integer division and modulo.
+// Follows Locally Tight Programs (2023), Conditional literals & Arithmetic (2025)
+// Division: exists I J K (val_t1(I) & val_t2(J) & F1(IJK) & F2(IJKZ))
+// Modulo:   exists I J K (val_t1(I) & val_t2(J) & F1(IJK) & F3(IJKZ))
+fn construct_partial_function_formula(
+    valti: Formula,
+    valtj: Formula,
+    binop: asp::BinaryOperator,
+    i: Variable,
+    j: Variable,
+    k: Variable,
+    z: Variable,
+) -> Formula {
+    assert_eq!(i.sort, Sort::Integer);
+    assert_eq!(j.sort, Sort::Integer);
+    assert_eq!(k.sort, Sort::Integer);
+    assert_eq!(z.sort, Sort::General);
+
+    let f1 = division_helper_f1(i.clone(), j.clone(), k.clone());
+
+    let f = match binop {
+        asp::BinaryOperator::Divide => division_helper_f2(i.clone(), j.clone(), k.clone(), z),
+        asp::BinaryOperator::Modulo => division_helper_f3(i.clone(), j.clone(), k.clone(), z),
+        _ => unreachable!("division and modulo are the only supported partial functions"),
+    };
+
+    Formula::QuantifiedFormula {
+        quantification: Quantification {
+            quantifier: Quantifier::Exists,
+            variables: vec![i, j, k],
+        },
+        formula: Formula::conjoin([valti, valtj, f1, f]).into(),
+    }
+}
 
 // val_t(Z)
-pub(crate) fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formula {
-    todo!()
+fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formula {
+    let mut taken_variables = taken_variables;
+    taken_variables.insert(z.clone());
+    for var in t.variables().iter() {
+        taken_variables.insert(Variable {
+            name: var.to_string(),
+            sort: Sort::General,
+        });
+    }
+
+    let fresh_int_vars = choose_fresh_ijk(taken_variables.clone());
+
+    for (_, value) in fresh_int_vars.iter() {
+        taken_variables.insert(value.clone());
+    }
+
+    match t {
+        asp::Term::PrecomputedTerm(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
+        asp::Term::UnaryOperation { op, arg } => match op {
+            asp::UnaryOperator::Negative => {
+                let lhs = asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Numeral(0)); // Shorthand for 0 - t
+                let valti = val(lhs, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
+                let valtj = val(*arg, fresh_int_vars["J"].clone(), taken_variables); // val_t2(J)
+                construct_total_function_formula(
+                    valti,
+                    valtj,
+                    asp::BinaryOperator::Subtract,
+                    fresh_int_vars["I"].clone(),
+                    fresh_int_vars["J"].clone(),
+                    z,
+                )
+            }
+            asp::UnaryOperator::AbsoluteValue => {
+                let valti = val(*arg, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
+                construct_absolute_value_formula(valti, fresh_int_vars["I"].clone(), z)
+            }
+        },
+        asp::Term::BinaryOperation { op, lhs, rhs } => {
+            let valti = val(*lhs, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
+            let valtj = val(*rhs, fresh_int_vars["J"].clone(), taken_variables); // val_t2(J)
+            match op {
+                asp::BinaryOperator::Add
+                | asp::BinaryOperator::Subtract
+                | asp::BinaryOperator::Multiply => construct_total_function_formula(
+                    valti,
+                    valtj,
+                    op,
+                    fresh_int_vars["I"].clone(),
+                    fresh_int_vars["J"].clone(),
+                    z,
+                ),
+                asp::BinaryOperator::Divide | asp::BinaryOperator::Modulo => {
+                    construct_partial_function_formula(
+                        valti,
+                        valtj,
+                        op,
+                        fresh_int_vars["I"].clone(),
+                        fresh_int_vars["J"].clone(),
+                        fresh_int_vars["K"].clone(),
+                        z,
+                    )
+                }
+                asp::BinaryOperator::Interval => construct_interval_formula(
+                    valti,
+                    valtj,
+                    fresh_int_vars["I"].clone(),
+                    fresh_int_vars["J"].clone(),
+                    fresh_int_vars["K"].clone(),
+                    z,
+                ),
+            }
+        }
+    }
 }
 
 // val_t1(Z1) & val_t2(Z2) & ... & val_tn(Zn)
@@ -199,7 +541,7 @@ fn valtz(mut terms: Vec<asp::Term>, mut variables: Vec<Variable>) -> Formula {
         terms
             .drain(..)
             .zip(variables.drain(..))
-            .map(|(t, v)| val(t, v)),
+            .map(|(t, v)| val(t, v, IndexSet::new())),
     )
 }
 
@@ -227,7 +569,7 @@ fn tau_b_literal(l: asp::Literal, taken_vars: IndexSet<Variable>) -> Formula {
         terms: var_terms,
     }));
 
-    // Compute tau^b(B)
+    // Compute tau^b(B) minus the existential quantifier
     let inner = match l.sign {
         asp::Sign::NoSign => Formula::BinaryFormula {
             connective: BinaryConnective::Conjunction,
@@ -346,8 +688,8 @@ fn tau_b_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula 
     local_vars.retain(|v| !(z.contains(v) || global_cl_vars.contains(v)));
 
     let consequent = match head {
-        ConditionalHead::AtomicFormula(a) => tau_b(a.clone()),
-        ConditionalHead::Falsity => Formula::AtomicFormula(AtomicFormula::Falsity),
+        asp::ConditionalHead::AtomicFormula(a) => tau_b(a.clone()),
+        asp::ConditionalHead::Falsity => Formula::AtomicFormula(AtomicFormula::Falsity),
     };
 
     let mut formulas = vec![];
@@ -390,7 +732,7 @@ fn tau_body(b: asp::Body, z: IndexSet<asp::Variable>) -> Formula {
     let mut formulas = Vec::new();
     for f in b.formulas.iter() {
         match f {
-            BodyLiteral::ConditionalLiteral(cl) => formulas.push(tau_b_cl(cl.clone(), &z)),
+            asp::BodyLiteral::ConditionalLiteral(cl) => formulas.push(tau_b_cl(cl.clone(), &z)),
         }
     }
     Formula::conjoin(formulas)
@@ -407,7 +749,7 @@ fn tau_star_rule(r: asp::Rule, globals: &[String]) -> Formula {
             // V1, ..., Vk
             let kvars = if predicate.arity > 0 {
                 globals[0..predicate.arity]
-                    .into_iter()
+                    .iter()
                     .map(|s| Variable {
                         name: s.to_string(),
                         sort: Sort::General,

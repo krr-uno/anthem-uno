@@ -578,10 +578,7 @@ impl Rule {
     }
 
     pub fn is_choice_rule(&self) -> bool {
-        match self.head {
-            Head::Choice(_) => true,
-            _ => false,
-        }
+        matches!(self.head, Head::Choice(_))
     }
 }
 
