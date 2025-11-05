@@ -84,6 +84,7 @@ pub struct Vampire {
     pub time_limit: usize,
     pub instances: usize,
     pub cores: usize,
+    pub induction: bool,
 }
 
 impl Prover for Vampire {
@@ -109,15 +110,25 @@ impl Prover for Vampire {
     fn prove(&self, problem: Problem) -> Result<Self::Report, Self::Error> {
         let start_time = Instant::now();
 
+        let cores = self.cores.to_string();
+        let time_limit = self.time_limit.to_string();
+
+        let mut arguments = Vec::from_iter([
+            "--mode",
+            "portfolio",
+            "--time_limit",
+            &time_limit,
+            "--cores",
+            &cores,
+        ]);
+
+        if self.induction {
+            arguments.push("--schedule");
+            arguments.push("induction");
+        }
+
         let mut child = Command::new("vampire")
-            .args([
-                "--mode",
-                "casc",
-                "--time_limit",
-                &self.time_limit.to_string(),
-                "--cores",
-                &self.cores().to_string(),
-            ])
+            .args(arguments)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

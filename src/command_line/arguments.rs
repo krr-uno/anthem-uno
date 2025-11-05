@@ -98,6 +98,10 @@ pub enum Command {
         #[arg(long, action)]
         no_timing: bool,
 
+        /// Instruct Vampire to schedule induction
+        #[arg(long, action)]
+        induction: bool,
+
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
         time_limit: usize,
