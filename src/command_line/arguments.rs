@@ -56,6 +56,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         with: Translation,
 
+        // Display formulas as LaTex
+        #[arg(long, action)]
+        display_latex: bool,
+
         /// The file to translate
         input: Option<PathBuf>,
     },
