@@ -30,7 +30,7 @@ impl Display for Format<'_, BinaryOperator> {
         match self.0 {
             BinaryOperator::Add => write!(f, "+"),
             BinaryOperator::Subtract => write!(f, "-"),
-            BinaryOperator::Multiply => write!(f, "\times"),
+            BinaryOperator::Multiply => write!(f, "\\times"),
         }
     }
 }
