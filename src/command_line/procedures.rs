@@ -9,6 +9,7 @@ use {
             files::Files,
         },
         convenience::{apply::Apply, compose::Compose},
+        formatting::fol::sigma_0::latex,
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp::mini_gringo as asp, fol::sigma_0 as fol},
         translating::{
@@ -126,8 +127,12 @@ pub fn main() -> Result<()> {
             Ok(())
         }
 
-        Command::Translate { with, input } => {
-            match with {
+        Command::Translate {
+            with,
+            input,
+            display_latex,
+        } => {
+            let theory = match with {
                 Translation::Completion => {
                     let theory: fol::Theory = match input {
                         Some(path) => match fol::Theory::from_file(&path) {
@@ -146,41 +151,43 @@ pub fn main() -> Result<()> {
                         },
                     }?;
 
-                    let completed_theory = theory
+                    theory
                         .completion(IndexSet::new())
-                        .context("the given theory is not completable")?;
-                    print!("{completed_theory}")
+                        .context("the given theory is not completable")?
                 }
 
                 Translation::Gamma => {
                     let theory =
                         input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-                    let gamma_theory = theory.gamma();
-                    print!("{gamma_theory}")
+                    theory.gamma()
                 }
 
                 Translation::Mu => {
                     let program =
                         input.map_or_else(asp::Program::from_stdin, asp::Program::from_file)?;
-                    let theory = program.mu();
-                    print!("{theory}")
+                    program.mu()
                 }
 
                 Translation::Natural => {
                     let program =
                         input.map_or_else(asp::Program::from_stdin, asp::Program::from_file)?;
-                    let theory = program
+                    program
                         .natural()
-                        .context("the given program is not regular")?;
-                    print!("{theory}")
+                        .context("the given program is not regular")?
                 }
 
                 Translation::TauStar => {
                     let program =
                         input.map_or_else(asp::Program::from_stdin, asp::Program::from_file)?;
-                    let theory = program.tau_star();
-                    print!("{theory}")
+                    program.tau_star()
                 }
+            };
+
+            if display_latex {
+                let theory = latex::Format(&theory);
+                print!("{theory}")
+            } else {
+                print!("{theory}")
             }
 
             Ok(())
