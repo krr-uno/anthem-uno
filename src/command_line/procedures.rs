@@ -129,8 +129,23 @@ pub fn main() -> Result<()> {
         Command::Translate { with, input } => {
             match with {
                 Translation::Completion => {
-                    let theory =
-                        input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
+                    let theory: fol::Theory = match input {
+                        Some(path) => match fol::Theory::from_file(&path) {
+                            Ok(theory) => Ok(theory),
+                            Err(_) => match asp::Program::from_file(path) {
+                                Ok(program) => Ok(program.tau_star()),
+                                Err(e) => Err(e),
+                            },
+                        },
+                        None => match fol::Theory::from_stdin() {
+                            Ok(theory) => Ok(theory),
+                            Err(_) => match asp::Program::from_stdin() {
+                                Ok(program) => Ok(program.tau_star()),
+                                Err(e) => Err(e),
+                            },
+                        },
+                    }?;
+
                     let completed_theory = theory
                         .completion(IndexSet::new())
                         .context("the given theory is not completable")?;
