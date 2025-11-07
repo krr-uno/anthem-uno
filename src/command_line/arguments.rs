@@ -46,6 +46,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         strategy: SimplificationStrategy,
 
+        // Display formulas as LaTex
+        #[arg(long, action)]
+        display_latex: bool,
+
         /// The file to simplify
         input: Option<PathBuf>,
     },

@@ -102,6 +102,7 @@ pub fn main() -> Result<()> {
             portfolio,
             strategy,
             input,
+            display_latex,
         } => {
             let mut simplification = match portfolio {
                 SimplificationPortfolio::Classic => [INTUITIONISTIC, HT, CLASSIC].concat(),
@@ -122,7 +123,12 @@ pub fn main() -> Result<()> {
                 })
                 .collect();
 
-            print!("{simplified_theory}");
+            if display_latex {
+                let theory = latex::Format(&simplified_theory);
+                print!("{theory}");
+            } else {
+                print!("{simplified_theory}");
+            }
 
             Ok(())
         }
