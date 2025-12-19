@@ -19,7 +19,7 @@ pub enum Command {
         property: Property,
 
         /// The ASP dialect of the input
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, default_value_t)]
         dialect: Dialect,
 
         /// The file to analyze
@@ -75,7 +75,7 @@ pub enum Command {
         decomposition: Decomposition,
 
         /// The ASP dialect of the input
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, default_value_t)]
         dialect: Dialect,
 
         /// The direction of the proof
@@ -144,8 +144,8 @@ pub enum Command {
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Dialect {
-    #[default]
     MiniGringo,
+    #[default]
     MiniGringoCL,
 }
 
