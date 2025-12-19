@@ -361,7 +361,7 @@ pub fn main() -> Result<()> {
                         )?;
 
                         ExternalEquivalenceTask {
-                            specification: specification.into(),
+                            specification,
                             program: program.into(),
                             user_guide: fol::UserGuide::from_file(
                                 files

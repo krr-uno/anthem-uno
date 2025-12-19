@@ -1,5 +1,8 @@
 use {
-    crate::syntax_tree::asp::mini_gringo::{Head, Predicate, Program},
+    crate::syntax_tree::asp::{
+        mini_gringo::{self, Head},
+        mini_gringo_cl,
+    },
     indexmap::IndexSet,
     petgraph::{algo::is_cyclic_directed, graph::DiGraph},
     std::collections::HashMap,
@@ -11,8 +14,8 @@ pub trait PrivateRecursion {
     fn has_private_recursion(&self, private_predicates: &Self::Predicates) -> bool;
 }
 
-impl PrivateRecursion for Program {
-    type Predicates = IndexSet<Predicate>;
+impl PrivateRecursion for mini_gringo::Program {
+    type Predicates = IndexSet<mini_gringo::Predicate>;
 
     fn has_private_recursion(&self, private_predicates: &Self::Predicates) -> bool {
         for rule in &self.rules {
@@ -56,19 +59,67 @@ impl PrivateRecursion for Program {
     }
 }
 
+impl PrivateRecursion for mini_gringo_cl::Program {
+    type Predicates = IndexSet<mini_gringo_cl::Predicate>;
+
+    fn has_private_recursion(&self, private_predicates: &Self::Predicates) -> bool {
+        for rule in &self.rules {
+            match rule.head {
+                mini_gringo_cl::Head::Choice(ref a) => {
+                    if private_predicates.contains(&a.predicate()) {
+                        return true;
+                    }
+                }
+                mini_gringo_cl::Head::Basic(_) | mini_gringo_cl::Head::Falsity => (),
+            }
+        }
+
+        let mut dependency_graph = DiGraph::<(), ()>::new();
+        let mut mapping = HashMap::new();
+
+        for predicate in self.predicates() {
+            if private_predicates.contains(&predicate) {
+                let node = dependency_graph.add_node(());
+                mapping.insert(predicate, node);
+            }
+        }
+
+        for rule in &self.rules {
+            if let Some(head_predicate) = rule.head.predicate() {
+                if private_predicates.contains(&head_predicate) {
+                    for body_predicate in rule.body.predicates() {
+                        if private_predicates.contains(&body_predicate) {
+                            dependency_graph.update_edge(
+                                mapping[&head_predicate],
+                                mapping[&body_predicate],
+                                (),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        is_cyclic_directed(&dependency_graph)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use {
         crate::{
             analyzing::private_recursion::PrivateRecursion,
-            syntax_tree::asp::mini_gringo::{Predicate, Program},
+            syntax_tree::asp::{
+                mini_gringo::{Predicate, Program},
+                mini_gringo_cl,
+            },
         },
         indexmap::IndexSet,
         std::str::FromStr,
     };
 
     #[test]
-    fn test_private_recursion() {
+    fn test_private_recursion_mg() {
         let private_predicates: IndexSet<Predicate> = IndexSet::from_iter(
             ["a/0", "b/0", "p/1"]
                 .into_iter()
@@ -92,6 +143,28 @@ mod tests {
         ] {
             assert!(
                 Program::from_str(program)
+                    .unwrap()
+                    .has_private_recursion(&private_predicates)
+            )
+        }
+    }
+
+    #[test]
+    fn test_private_recursion_mgcl() {
+        let private_predicates: IndexSet<mini_gringo_cl::Predicate> =
+            IndexSet::from_iter(["a/0", "b/0"].into_iter().map(|p| p.parse().unwrap()));
+
+        for program in ["c :- c : a.", "c :- a : c."] {
+            assert!(
+                !mini_gringo_cl::Program::from_str(program)
+                    .unwrap()
+                    .has_private_recursion(&private_predicates)
+            )
+        }
+
+        for program in ["{a}.", "a :- a : b.", "a :- b : a."] {
+            assert!(
+                mini_gringo_cl::Program::from_str(program)
                     .unwrap()
                     .has_private_recursion(&private_predicates)
             )

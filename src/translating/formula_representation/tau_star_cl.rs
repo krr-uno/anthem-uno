@@ -437,7 +437,7 @@ fn construct_partial_function_formula(
     assert_eq!(i.sort, Sort::Integer);
     assert_eq!(j.sort, Sort::Integer);
     assert_eq!(k.sort, Sort::Integer);
-    assert_eq!(z.sort, Sort::General);
+    //assert_eq!(z.sort, Sort::General);
 
     let f1 = division_helper_f1(i.clone(), j.clone(), k.clone());
 

@@ -2,7 +2,7 @@ use {
     crate::{
         analyzing::{private_recursion::PrivateRecursion, tightness::Tightness},
         breaking::fol::sigma_0::ht::break_equivalences_annotated_formula,
-        command_line::arguments::{Decomposition, FormulaRepresentation},
+        command_line::arguments::Decomposition,
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
@@ -119,7 +119,7 @@ impl Display for ExternalEquivalenceTaskWarning {
 
 #[derive(Error, Debug)]
 pub enum ExternalEquivalenceTaskError {
-    UnsupportedFormulaRepresentation,
+    //UnsupportedFormulaRepresentation,
     NonTightProgram(asp::Program),
     ProgramContainsPrivateRecursion(asp::Program),
     InputOutputPredicatesOverlap(Vec<fol::Predicate>),
@@ -219,12 +219,12 @@ impl Display for ExternalEquivalenceTaskError {
             ExternalEquivalenceTaskError::ProofOutlineError(_) => {
                 writeln!(f, "the given proof outline contains errors")
             }
-            ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation => {
-                writeln!(
-                    f,
-                    "tau-star is the only formula-representation currently supported for external equivalence"
-                )
-            }
+            // ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation => {
+            //     writeln!(
+            //         f,
+            //         "tau-star is the only formula-representation currently supported for external equivalence"
+            //     )
+            // }
             ExternalEquivalenceTaskError::SpecificationContainsUnsupportedRoles(formula) => {
                 writeln!(
                     f,
