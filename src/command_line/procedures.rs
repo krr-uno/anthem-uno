@@ -208,14 +208,14 @@ pub fn main() -> Result<()> {
                     let theory: fol::Theory = match input {
                         Some(path) => match fol::Theory::from_file(&path) {
                             Ok(theory) => Ok(theory),
-                            Err(_) => match asp::Program::from_file(path) {
+                            Err(_) => match asp::mini_gringo::Program::from_file(path) {
                                 Ok(program) => Ok(program.tau_star()),
                                 Err(e) => Err(e),
                             },
                         },
                         None => match fol::Theory::from_stdin() {
                             Ok(theory) => Ok(theory),
-                            Err(_) => match asp::Program::from_stdin() {
+                            Err(_) => match asp::mini_gringo::Program::from_stdin() {
                                 Ok(program) => Ok(program.tau_star()),
                                 Err(e) => Err(e),
                             },
@@ -236,10 +236,7 @@ pub fn main() -> Result<()> {
                 Translation::Mu => {
                     let program = get_program_of_unknown_dialect(input)?;
                     match program {
-                        Program::MiniGringo(program) => {
-                            let theory = program.mu();
-                            print!("{theory}")
-                        }
+                        Program::MiniGringo(program) => program.mu(),
                         Program::MiniGringoCl(_) => todo!(),
                     }
                 }
@@ -247,21 +244,24 @@ pub fn main() -> Result<()> {
                 Translation::Natural => {
                     let program = get_program_of_unknown_dialect(input)?;
                     match program {
-                        Program::MiniGringo(program) => {
-                            let theory = program
-                                .natural()
-                                .context("the given program is not regular")?;
-                            print!("{theory}")
-                        }
+                        Program::MiniGringo(program) => program
+                            .natural()
+                            .context("the given program is not regular")?,
                         Program::MiniGringoCl(_) => todo!(),
                     }
                 }
 
                 Translation::TauStar => {
                     let program = get_program_of_unknown_dialect(input)?;
-                    let theory = program.tau_star();
-                    print!("{theory}")
+                    program.tau_star()
                 }
+            };
+
+            if display_latex {
+                let theory = latex::Format(&theory);
+                print!("{theory}")
+            } else {
+                print!("{theory}")
             }
 
             Ok(())

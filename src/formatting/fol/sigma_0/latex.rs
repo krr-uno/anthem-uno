@@ -21,6 +21,7 @@ impl Display for Format<'_, UnaryOperator> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
             UnaryOperator::Negative => write!(f, "-"),
+            UnaryOperator::AbsoluteValue => write!(f, "\\abs"),
         }
     }
 }
@@ -41,10 +42,7 @@ impl Precedence for Format<'_, IntegerTerm> {
     fn precedence(&self) -> usize {
         match self.0 {
             IntegerTerm::Numeral(1..) => 1,
-            IntegerTerm::UnaryOperation {
-                op: UnaryOperator::Negative,
-                ..
-            }
+            IntegerTerm::UnaryOperation { .. }
             | IntegerTerm::Numeral(_)
             | IntegerTerm::FunctionConstant(_)
             | IntegerTerm::Variable(_) => 0,
