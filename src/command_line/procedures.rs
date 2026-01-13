@@ -12,6 +12,7 @@ use {
         convenience::{
             apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
         },
+        formatting::fol::sigma_0::latex,
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp, fol::sigma_0 as fol},
         translating::{
@@ -166,6 +167,7 @@ pub fn main() -> Result<()> {
             portfolio,
             strategy,
             input,
+            display_latex,
         } => {
             let mut simplification = match portfolio {
                 SimplificationPortfolio::Classic => [INTUITIONISTIC, HT, CLASSIC].concat(),
@@ -186,26 +188,49 @@ pub fn main() -> Result<()> {
                 })
                 .collect();
 
-            print!("{simplified_theory}");
+            if display_latex {
+                let theory = latex::Format(&simplified_theory);
+                print!("{theory}");
+            } else {
+                print!("{simplified_theory}");
+            }
 
             Ok(())
         }
-        Command::Translate { with, input } => {
-            match with {
+
+        Command::Translate {
+            with,
+            input,
+            display_latex,
+        } => {
+            let theory = match with {
                 Translation::Completion => {
-                    let theory =
-                        input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-                    let completed_theory = theory
+                    let theory: fol::Theory = match input {
+                        Some(path) => match fol::Theory::from_file(&path) {
+                            Ok(theory) => Ok(theory),
+                            Err(_) => match asp::Program::from_file(path) {
+                                Ok(program) => Ok(program.tau_star()),
+                                Err(e) => Err(e),
+                            },
+                        },
+                        None => match fol::Theory::from_stdin() {
+                            Ok(theory) => Ok(theory),
+                            Err(_) => match asp::Program::from_stdin() {
+                                Ok(program) => Ok(program.tau_star()),
+                                Err(e) => Err(e),
+                            },
+                        },
+                    }?;
+
+                    theory
                         .completion(IndexSet::new())
-                        .context("the given theory is not completable")?;
-                    print!("{completed_theory}")
+                        .context("the given theory is not completable")?
                 }
 
                 Translation::Gamma => {
                     let theory =
                         input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-                    let gamma_theory = theory.gamma();
-                    print!("{gamma_theory}")
+                    theory.gamma()
                 }
 
                 Translation::Mu => {

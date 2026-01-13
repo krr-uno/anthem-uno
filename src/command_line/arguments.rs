@@ -50,6 +50,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         strategy: SimplificationStrategy,
 
+        // Display formulas as LaTex
+        #[arg(long, action)]
+        display_latex: bool,
+
         /// The file to simplify
         input: Option<PathBuf>,
     },
@@ -59,6 +63,10 @@ pub enum Command {
         /// The translation to use
         #[arg(long, value_enum)]
         with: Translation,
+
+        // Display formulas as LaTex
+        #[arg(long, action)]
+        display_latex: bool,
 
         /// The file to translate
         input: Option<PathBuf>,
