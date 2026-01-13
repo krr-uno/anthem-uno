@@ -18,6 +18,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         property: Property,
 
+        /// The ASP dialect of the input
+        #[arg(long, value_enum, default_value_t)]
+        dialect: Dialect,
+
         /// The file to analyze
         input: Option<PathBuf>,
     },
@@ -78,13 +82,13 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         decomposition: Decomposition,
 
+        /// The ASP dialect of the input
+        #[arg(long, value_enum, default_value_t)]
+        dialect: Dialect,
+
         /// The direction of the proof
         #[arg(long, value_enum, default_value_t)]
         direction: Direction,
-
-        /// The ASP-to-target-language translation to use
-        #[arg(long, value_enum, default_value_t)]
-        formula_representation: FormulaRepresentation,
 
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
@@ -130,6 +134,27 @@ pub enum Command {
         #[arg(verbatim_doc_comment)]
         files: Vec<PathBuf>,
     },
+
+    /// Visualize a first-order formula
+    Visualize {
+        /// The property to visualize
+        #[arg(long, value_enum)]
+        property: Visualization,
+
+        /// The destination directory for the visualization file
+        #[arg(long)]
+        save_visualization: PathBuf,
+
+        /// The file to visualize
+        input: Option<PathBuf>,
+    },
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Dialect {
+    MiniGringo,
+    #[default]
+    MiniGringoCL,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -139,8 +164,15 @@ pub enum Property {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Visualization {
+    Ast,
+    DependencyGraph,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ParseAs {
-    Program,
+    MiniGringoProgram,
+    MiniGringoCLProgram,
     Theory,
     Specification,
     UserGuide,

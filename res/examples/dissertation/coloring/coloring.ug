@@ -1,0 +1,4 @@
+input: vtx/1.
+input: edge/2.
+input: color/1.
+output: asg/2.

@@ -2,14 +2,14 @@ use {
     crate::{
         analyzing::{private_recursion::PrivateRecursion, tightness::Tightness},
         breaking::fol::sigma_0::ht::break_equivalences_annotated_formula,
-        command_line::arguments::{Decomposition, FormulaRepresentation},
+        command_line::arguments::Decomposition,
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        syntax_tree::{asp::mini_gringo_cl as asp, fol::sigma_0 as fol},
         translating::{
             classical_reduction::completion::Completion as _,
             formula_representation::tau_star::TauStar as _,
@@ -119,7 +119,7 @@ impl Display for ExternalEquivalenceTaskWarning {
 
 #[derive(Error, Debug)]
 pub enum ExternalEquivalenceTaskError {
-    UnsupportedFormulaRepresentation,
+    //UnsupportedFormulaRepresentation,
     NonTightProgram(asp::Program),
     ProgramContainsPrivateRecursion(asp::Program),
     InputOutputPredicatesOverlap(Vec<fol::Predicate>),
@@ -219,12 +219,12 @@ impl Display for ExternalEquivalenceTaskError {
             ExternalEquivalenceTaskError::ProofOutlineError(_) => {
                 writeln!(f, "the given proof outline contains errors")
             }
-            ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation => {
-                writeln!(
-                    f,
-                    "tau-star is the only formula-representation currently supported for external equivalence"
-                )
-            }
+            // ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation => {
+            //     writeln!(
+            //         f,
+            //         "tau-star is the only formula-representation currently supported for external equivalence"
+            //     )
+            // }
             ExternalEquivalenceTaskError::SpecificationContainsUnsupportedRoles(formula) => {
                 writeln!(
                     f,
@@ -243,7 +243,6 @@ pub struct ExternalEquivalenceTask {
     pub proof_outline: fol::Specification,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
-    pub formula_representation: FormulaRepresentation,
     pub bypass_tightness: bool,
     pub simplify: bool,
     pub break_equivalences: bool,
@@ -254,7 +253,8 @@ impl ExternalEquivalenceTask {
         &self,
         program: &asp::Program,
     ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
-        if program.is_tight() {
+        let intensional_predicates = program.predicates().into_iter().map(|p| p.into()).collect();
+        if program.is_tight(intensional_predicates) {
             Ok(WithWarnings::flawless(()))
         } else if self.bypass_tightness {
             Ok(WithWarnings::flawless(()).add_warning(
@@ -401,16 +401,6 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()))
     }
 
-    fn ensure_valid_formula_representation(
-        &self,
-    ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
-        if !matches!(self.formula_representation, FormulaRepresentation::TauStar) {
-            return Err(ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation);
-        }
-
-        Ok(WithWarnings::flawless(()))
-    }
-
     fn ensure_specification_roles_are_supported(
         &self,
         formulas: &Vec<fol::AnnotatedFormula>,
@@ -437,8 +427,6 @@ impl Task for ExternalEquivalenceTask {
     type Warning = ExternalEquivalenceTaskWarning;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
-        self.ensure_valid_formula_representation()?;
-
         let placeholders = self
             .user_guide
             .placeholders()

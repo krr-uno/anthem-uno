@@ -1,8 +1,10 @@
 use {
     crate::{
-        convenience::unbox::{Unbox, fol::sigma_0::UnboxedFormula},
+        convenience::{
+            unbox::{Unbox, fol::sigma_0::UnboxedFormula},
+            variable_selection::VariableSelection,
+        },
         syntax_tree::fol::sigma_0 as fol,
-        translating::formula_representation::tau_star::choose_fresh_variable_names,
     },
     indexmap::{IndexMap, IndexSet, map::Entry},
     itertools::Itertools,
@@ -97,13 +99,13 @@ pub(crate) fn has_head_mismatches(definitions: &Definitions) -> bool {
     false
 }
 
-fn atomic_formula_from(predicate: &fol::Predicate) -> fol::AtomicFormula {
+pub(crate) fn atomic_formula_from(predicate: &fol::Predicate) -> fol::AtomicFormula {
     // Make 'V' off-limits for consistency with global variable selection strategy
     let taken_variables = IndexSet::from_iter(vec![fol::Variable {
         name: "V".to_string(),
         sort: fol::Sort::General,
     }]);
-    let variables = choose_fresh_variable_names(&taken_variables, "V", predicate.arity);
+    let variables = taken_variables.choose_fresh_variables("V", predicate.arity);
     let terms = variables
         .into_iter()
         .map(fol::GeneralTerm::Variable)
@@ -331,7 +333,7 @@ mod tests {
             ),
             (
                 ":- s(X, I), not covered(X).",
-                "forall X I (exists Z Z1 (Z = X and Z1 = I and s(Z, Z1)) and exists Z (Z = X and not covered(Z)) -> #false). forall V1 V2 (s(V1,V2) <-> #false). forall V1 (covered(V1) <-> #false).",
+                "forall I X (exists Z Z1 (Z = X and Z1 = I and s(Z, Z1)) and exists Z (Z = X and not covered(Z)) -> #false). forall V1 V2 (s(V1,V2) <-> #false). forall V1 (covered(V1) <-> #false).",
                 IndexSet::new(),
             ),
         ] {

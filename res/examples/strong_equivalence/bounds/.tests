@@ -1,1 +1,1 @@
-tptp_compliance verify --equivalence strong --no-proof-search --save-problems $OUT bounds.1.lp bounds.2.lp
+tptp_compliance verify --equivalence strong --dialect mini-gringo --no-proof-search --save-problems $OUT bounds.1.lp bounds.2.lp
