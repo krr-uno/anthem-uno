@@ -788,6 +788,17 @@ impl Program {
         }
         functions
     }
+
+    pub fn max_arity(&self) -> usize {
+        let mut max_arity = 0;
+        for rule in self.rules.iter() {
+            let head_arity = rule.head.arity();
+            if head_arity > max_arity {
+                max_arity = head_arity;
+            }
+        }
+        max_arity
+    }
 }
 
 impl FromIterator<Rule> for Program {

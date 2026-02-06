@@ -9,7 +9,7 @@ pub trait Regularity {
 
 impl Regularity for Program {
     fn is_regular(&self) -> bool {
-        self.clone().natural().is_some()
+        self.clone().natural(false).is_some()
     }
 }
 

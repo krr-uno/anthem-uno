@@ -25,13 +25,7 @@ pub const PREPROCESS: &[fn(Formula) -> Formula] = &[
 
 /// Choose fresh variants of `Vn` by incrementing `n`
 fn choose_fresh_global_variables(program: &asp::Program) -> Vec<String> {
-    let mut max_arity = 0;
-    for rule in program.rules.iter() {
-        let head_arity = rule.head.arity();
-        if head_arity > max_arity {
-            max_arity = head_arity;
-        }
-    }
+    let max_arity = program.max_arity();
     program.choose_fresh_variables("V", max_arity)
 }
 

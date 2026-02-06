@@ -245,7 +245,7 @@ pub fn main() -> Result<()> {
                     let program = get_program_of_unknown_dialect(input)?;
                     match program {
                         Program::MiniGringo(program) => program
-                            .natural()
+                            .natural(false)
                             .context("the given program is not regular")?,
                         Program::MiniGringoCl(_) => todo!(),
                     }

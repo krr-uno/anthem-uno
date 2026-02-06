@@ -6,8 +6,16 @@
 
 use {
     crate::{
-        convenience::variable_selection::VariableSelection,
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        convenience::{
+            unbox::{Unbox as _, fol::sigma_0::UnboxedFormula},
+            variable_selection::VariableSelection,
+        },
+        syntax_tree::{
+            asp::mini_gringo as asp,
+            fol::sigma_0::{
+                self as fol, BinaryConnective, Formula, Quantification, Quantifier, Theory,
+            },
+        },
     },
     indexmap::IndexSet,
 };
@@ -165,7 +173,7 @@ fn int_variables(r: &asp::Rule) -> IndexSet<String> {
 fn natural_comparison(
     c: &asp::Comparison,
     int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+) -> Option<Formula> {
     // translate comparison
 
     let f_relation = c.relation.into();
@@ -179,7 +187,7 @@ fn natural_comparison(
             {
                 let t2 = p2f(t2, int_vars)?;
                 let t3 = p2f(t3, int_vars)?;
-                fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
+                Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                     term: t2,
                     guards: vec![
                         fol::Guard {
@@ -197,7 +205,7 @@ fn natural_comparison(
             }
         } else {
             let rhs = p2f(&c.rhs, int_vars)?;
-            fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
+            Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                 term: lhs,
                 guards: vec![fol::Guard {
                     relation: f_relation,
@@ -222,26 +230,26 @@ fn natural_b_atom(l: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Op
 fn natural_b_literal(
     l: &asp::Literal,
     int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+) -> Option<Formula> {
     let atom = natural_b_atom(&l.atom, int_vars)?;
     Some(match l.sign {
-        asp::Sign::NoSign => fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)),
-        asp::Sign::Negation => fol::Formula::UnaryFormula {
+        asp::Sign::NoSign => Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)),
+        asp::Sign::Negation => Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
-            formula: Box::new(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
+            formula: Box::new(Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
         },
-        asp::Sign::DoubleNegation => fol::Formula::UnaryFormula {
+        asp::Sign::DoubleNegation => Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
-            formula: Box::new(fol::Formula::UnaryFormula {
+            formula: Box::new(Formula::UnaryFormula {
                 connective: fol::UnaryConnective::Negation,
-                formula: Box::new(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
+                formula: Box::new(Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
             }),
         },
     })
 }
 
-fn natural_body(b: &asp::Body, int_vars: &IndexSet<std::string::String>) -> Option<fol::Formula> {
-    let mut formulas = Vec::<fol::Formula>::new();
+fn natural_body(b: &asp::Body, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
+    let mut formulas = Vec::<Formula>::new();
     for f in b.formulas.iter() {
         match f {
             asp::AtomicFormula::Literal(l) => {
@@ -252,7 +260,7 @@ fn natural_body(b: &asp::Body, int_vars: &IndexSet<std::string::String>) -> Opti
             }
         }
     }
-    Some(fol::Formula::conjoin(formulas))
+    Some(Formula::conjoin(formulas))
 }
 
 fn fresh_variables_for_head_atom(a: &asp::Atom) -> Vec<String> {
@@ -272,7 +280,7 @@ fn natural_head_atom(
     a: &asp::Atom,
     int_vars: &IndexSet<std::string::String>,
     fresh_vars: &[String],
-) -> Option<fol::Formula> {
+) -> Option<Formula> {
     // If head is not regular, returns None
     // If head is regular returns the atom with intervals replaced by fresh variables and regular terms translated:
     // Example: p(a, 1..10, X, I+1) -> p(a, N1$i, X, I$i + 1)
@@ -291,7 +299,7 @@ fn natural_head_atom(
             return None;
         };
     }
-    Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(
+    Some(Formula::AtomicFormula(fol::AtomicFormula::Atom(
         fol::Atom {
             predicate_symbol: a.predicate_symbol.clone(),
             terms,
@@ -303,9 +311,9 @@ fn natural_head_interval(
     a: &asp::Atom,
     int_vars: &IndexSet<std::string::String>,
     fresh_vars: &[String],
-) -> fol::Formula {
+) -> Formula {
     // assumes that natural_head_atom returned Some and therefore head is regular
-    let mut formulas = Vec::<fol::Formula>::new();
+    let mut formulas = Vec::<Formula>::new();
     let mut fresh_vars = fresh_vars.iter();
     for t in &a.terms {
         if is_term_regular_of_second_kind(t) {
@@ -321,7 +329,7 @@ fn natural_head_interval(
             let fresh_var = fresh_vars.next().unwrap();
             // create formula for t1 <= fresh_var and fresh_var <= t2
             let comp_formula =
-                fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
+                Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                     term: p2f(t1, int_vars)
                         .expect("p2f should not return None for a lhs-term of the second kind"),
                     guards: vec![
@@ -345,13 +353,10 @@ fn natural_head_interval(
         }
     }
     // conjoin all formulas
-    fol::Formula::conjoin(formulas)
+    Formula::conjoin(formulas)
 }
 
-fn natural_basic_head(
-    a: &asp::Atom,
-    int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+fn natural_basic_head(a: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
     let fresh_vars = fresh_variables_for_head_atom(a);
     let conclusion = natural_head_atom(a, int_vars, &fresh_vars)?;
     if fresh_vars.is_empty() {
@@ -368,27 +373,24 @@ fn natural_basic_head(
             .collect(),
     };
     let conditions = natural_head_interval(a, int_vars, &fresh_vars);
-    Some(fol::Formula::QuantifiedFormula {
+    Some(Formula::QuantifiedFormula {
         quantification,
-        formula: Box::new(fol::Formula::BinaryFormula {
-            connective: fol::BinaryConnective::Implication,
+        formula: Box::new(Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
             lhs: conditions.into(),
             rhs: conclusion.into(),
         }),
     })
 }
 
-fn natural_choice_head(
-    a: &asp::Atom,
-    int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+fn natural_choice_head(a: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
     let fresh_vars = fresh_variables_for_head_atom(a);
     let head_atom = natural_head_atom(a, int_vars, &fresh_vars)?;
     // conclusion is a disjunction of natural_head_atom and its negation
-    let conclusion = fol::Formula::BinaryFormula {
-        connective: fol::BinaryConnective::Disjunction,
+    let conclusion = Formula::BinaryFormula {
+        connective: BinaryConnective::Disjunction,
         lhs: head_atom.clone().into(),
-        rhs: fol::Formula::UnaryFormula {
+        rhs: Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
             formula: Box::new(head_atom.clone()),
         }
@@ -408,21 +410,21 @@ fn natural_choice_head(
             .collect(),
     };
     let conditions = natural_head_interval(a, int_vars, &fresh_vars);
-    Some(fol::Formula::QuantifiedFormula {
+    Some(Formula::QuantifiedFormula {
         quantification,
-        formula: Box::new(fol::Formula::BinaryFormula {
-            connective: fol::BinaryConnective::Implication,
+        formula: Box::new(Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
             lhs: conditions.into(),
             rhs: conclusion.into(),
         }),
     })
 }
 
-fn natural_constraint() -> fol::Formula {
-    fol::Formula::AtomicFormula(fol::AtomicFormula::Falsity)
+fn natural_constraint() -> Formula {
+    Formula::AtomicFormula(fol::AtomicFormula::Falsity)
 }
 
-fn natural_head(h: &asp::Head, int_vars: &IndexSet<std::string::String>) -> Option<fol::Formula> {
+fn natural_head(h: &asp::Head, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
     match h {
         asp::Head::Basic(a) => natural_basic_head(a, int_vars),
         asp::Head::Choice(a) => natural_choice_head(a, int_vars),
@@ -430,13 +432,13 @@ fn natural_head(h: &asp::Head, int_vars: &IndexSet<std::string::String>) -> Opti
     }
 }
 
-pub(crate) fn natural_rule(r: &asp::Rule) -> Option<fol::Formula> {
+pub(crate) fn natural_rule(r: &asp::Rule) -> Option<Formula> {
     let int_vars = int_variables(r);
     let head = natural_head(&r.head, &int_vars)?;
     let body = natural_body(&r.body, &int_vars)?;
     Some(
-        (fol::Formula::BinaryFormula {
-            connective: fol::BinaryConnective::Implication,
+        (Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
             lhs: body.into(),
             rhs: head.into(),
         })
@@ -444,8 +446,133 @@ pub(crate) fn natural_rule(r: &asp::Rule) -> Option<fol::Formula> {
     )
 }
 
-fn natural(program: asp::Program) -> Option<fol::Theory> {
-    let mut formulas = Vec::<fol::Formula>::new();
+// forall X ( B(X) -> forall Y (v(Y) -> p(Y)) )  ==>  forall X Y ( B(X) & v(Y) -> p(Y) )
+fn move_values_to_antecedent(formula: Formula) -> Option<Formula> {
+    todo!()
+}
+
+// B -> A v ~A  ==> B & ~~A -> A
+fn restructure_disjunctive_head(formula: Formula) -> Option<Formula> {
+    todo!()
+}
+
+fn mirror_tau_star(formula: Formula) -> Option<Formula> {
+    match move_values_to_antecedent(formula) {
+        Some(formula) => restructure_disjunctive_head(formula),
+        None => None,
+    }
+}
+
+fn make_implication_completable(
+    antecedent: Formula,
+    consequent: Formula,
+    var_names: &[String],
+) -> Option<Formula> {
+    match consequent {
+        Formula::AtomicFormula(fol::AtomicFormula::Falsity) => Some(Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: antecedent.into(),
+            rhs: Formula::AtomicFormula(fol::AtomicFormula::Falsity).into(),
+        }),
+
+        // lhs -> p(t) becomes lhs & t = V -> p(V)
+        Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)) => {
+            let mut new_vars = vec![];
+            let mut new_terms = vec![];
+            let mut val_t = vec![];
+            for (i, term) in atom.terms.into_iter().enumerate() {
+                let var = fol::GeneralTerm::Variable(var_names[i].clone());
+                new_terms.push(var.clone());
+                val_t.push(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                    fol::Comparison {
+                        term,
+                        guards: vec![fol::Guard {
+                            relation: fol::Relation::Equal,
+                            term: var,
+                        }],
+                    },
+                )));
+                new_vars.push(fol::Variable {
+                    name: var_names[i].clone(),
+                    sort: fol::Sort::General,
+                });
+            }
+
+            val_t.push(antecedent);
+            let new_head = fol::Atom {
+                predicate_symbol: atom.predicate_symbol,
+                terms: new_terms,
+            };
+
+            Some(Formula::QuantifiedFormula {
+                quantification: Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables: new_vars,
+                },
+                formula: Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::conjoin(val_t).into(),
+                    rhs: Formula::AtomicFormula(fol::AtomicFormula::Atom(new_head)).into(),
+                }
+                .into(),
+            })
+        }
+
+        _ => None,
+    }
+}
+
+// forall X ( B(X) -> p(t) )  ==>  forall X Y ( B(X) & t=Y -> p(Y) )
+/// Assumes theory is obtained by applying the mirror_tau_star normalization
+/// to a theory representing the natural translation of a set of regular rules
+fn make_completable(theory: Theory, var_names: &[String]) -> Option<Theory> {
+    let mut formulas = Vec::<Formula>::new();
+
+    for f in theory.formulas {
+        match mirror_tau_star(f) {
+            Some(formula) => match formula.unbox() {
+                // lhs -> rhs
+                UnboxedFormula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs,
+                    rhs,
+                } => match make_implication_completable(lhs, rhs, var_names) {
+                    Some(f) => formulas.push(f),
+                    None => return None,
+                },
+
+                // forall X ( lhs -> rhs )
+                UnboxedFormula::QuantifiedFormula {
+                    quantification:
+                        Quantification {
+                            quantifier: Quantifier::Forall,
+                            ..
+                        },
+                    formula:
+                        Formula::BinaryFormula {
+                            connective: BinaryConnective::Implication,
+                            lhs,
+                            rhs,
+                        },
+                } => match make_implication_completable(*lhs, *rhs, var_names) {
+                    Some(f) => formulas.push(f.universal_closure_with_quantifier_joining()),
+                    None => return None,
+                },
+
+                _ => return None,
+            },
+
+            None => return None,
+        }
+    }
+
+    Some(Theory { formulas })
+}
+
+fn natural(program: asp::Program, completable: bool) -> Option<Theory> {
+    let max_arity = program.max_arity();
+
+    let mut formulas = Vec::<Formula>::new();
     for r in program.rules {
         if let Some(f) = natural_rule(&r) {
             formulas.push(f);
@@ -453,20 +580,29 @@ fn natural(program: asp::Program) -> Option<fol::Theory> {
             return None;
         }
     }
-    Some(fol::Theory { formulas })
+    let natural_theory = Theory { formulas };
+
+    if completable {
+        let fresh_var_names = natural_theory
+            .variables()
+            .choose_fresh_variables("V", max_arity);
+        make_completable(natural_theory, &fresh_var_names)
+    } else {
+        Some(natural_theory)
+    }
 }
 
 pub trait Natural {
     type Output;
 
-    fn natural(self) -> Option<Self::Output>;
+    fn natural(self, completable: bool) -> Option<Self::Output>;
 }
 
 impl Natural for asp::Program {
-    type Output = fol::Theory;
+    type Output = Theory;
 
-    fn natural(self) -> Option<Self::Output> {
-        natural(self)
+    fn natural(self, completable: bool) -> Option<Self::Output> {
+        natural(self, completable)
     }
 }
 
@@ -481,6 +617,8 @@ mod tests {
         },
         indexmap::IndexSet,
     };
+
+    use crate::syntax_tree::fol::sigma_0::Formula;
 
     #[test]
     fn test_contains_symbol_or_infimum_or_supremum() {
@@ -792,7 +930,7 @@ mod tests {
         for (source, target, int_vars) in [
             (
                 "3 = 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(3)),
                         guards: vec![fol::Guard {
@@ -805,7 +943,7 @@ mod tests {
             ),
             (
                 "X = 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::Variable("X".to_string()),
                         guards: vec![fol::Guard {
@@ -818,7 +956,7 @@ mod tests {
             ),
             (
                 "X < 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::Variable("X".to_string()),
                         guards: vec![fol::Guard {
@@ -831,7 +969,7 @@ mod tests {
             ),
             (
                 "X = 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Variable(
                             "X".to_string(),
@@ -846,7 +984,7 @@ mod tests {
             ),
             (
                 "3 = 3..5",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(3)),
                         guards: vec![
@@ -865,7 +1003,7 @@ mod tests {
             ),
             (
                 "X = 3..5",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(3)),
                         guards: vec![
@@ -886,7 +1024,7 @@ mod tests {
             ),
             (
                 "X = Y+5..3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::BinaryOperation {
                             op: fol::BinaryOperator::Add,
@@ -970,7 +1108,7 @@ mod tests {
             let rule = source.parse().unwrap();
             let natural = natural_rule(&rule).unwrap();
             let natural_string = natural.to_string();
-            let target_formula: fol::Formula = target.parse().unwrap();
+            let target_formula: Formula = target.parse().unwrap();
             let target = target_formula.to_string();
             assert_eq!(
                 natural, target_formula,
@@ -1043,7 +1181,7 @@ mod tests {
 
             match target {
                 Some(target_str) => {
-                    let target_formula: fol::Formula = target_str.parse().unwrap();
+                    let target_formula: Formula = target_str.parse().unwrap();
                     assert_eq!(
                         natural_head.as_ref().unwrap(),
                         &target_formula,
@@ -1091,7 +1229,7 @@ mod tests {
                 fresh_vars.iter().map(|v| v.to_string()).collect();
             let natural_head = natural_head_interval(&atom, &int_set, &fresh_vars);
 
-            let target_formula: fol::Formula = target.parse().unwrap();
+            let target_formula: Formula = target.parse().unwrap();
             assert_eq!(
                 natural_head, target_formula,
                 "assertion `natural_head_interval({atom}) == target` failed:\n natural_head_interval:\n{:?}\n target:\n{:?}",
@@ -1150,7 +1288,7 @@ mod tests {
 
             match target {
                 Some(target_str) => {
-                    let target_formula: fol::Formula = target_str.parse().unwrap();
+                    let target_formula: Formula = target_str.parse().unwrap();
                     assert_eq!(
                         natural_head.as_ref().unwrap(),
                         &target_formula,
@@ -1220,7 +1358,7 @@ mod tests {
 
             match target {
                 Some(target_str) => {
-                    let target_formula: fol::Formula = target_str.parse().unwrap();
+                    let target_formula: Formula = target_str.parse().unwrap();
                     assert_eq!(
                         natural_head.as_ref().unwrap(),
                         &target_formula,

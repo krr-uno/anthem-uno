@@ -1017,6 +1017,14 @@ impl Theory {
             .map(|f| f.replace_placeholders(mapping))
             .collect()
     }
+
+    pub fn variables(&self) -> IndexSet<Variable> {
+        let mut vars = IndexSet::new();
+        for formula in self {
+            vars.extend(formula.variables())
+        }
+        vars
+    }
 }
 
 impl FromIterator<Formula> for Theory {
