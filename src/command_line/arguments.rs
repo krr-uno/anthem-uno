@@ -86,6 +86,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         dialect: Dialect,
 
+        /// The translation used to obtain the program's formula representation
+        #[arg(long, value_enum, default_value_t)]
+        formula_representation: FormulaRepresentation,
+
         /// The direction of the proof
         #[arg(long, value_enum, default_value_t)]
         direction: Direction,

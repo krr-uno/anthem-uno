@@ -281,6 +281,7 @@ pub fn main() -> Result<()> {
             save_problems: out_dir,
             files,
             dialect,
+            formula_representation,
         } => {
             let start_time = Instant::now();
 
@@ -360,6 +361,7 @@ pub fn main() -> Result<()> {
                             .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
                         decomposition,
                         direction,
+                        formula_representation,
                         bypass_tightness,
                         simplify: !no_simplify,
                         break_equivalences: !no_eq_break,
@@ -399,6 +401,7 @@ pub fn main() -> Result<()> {
                                 .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
                             decomposition,
                             direction,
+                            formula_representation,
                             bypass_tightness,
                             simplify: !no_simplify,
                             break_equivalences: !no_eq_break,

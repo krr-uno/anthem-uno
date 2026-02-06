@@ -667,41 +667,44 @@ fn make_implication_completable(
 }
 
 // forall X ( B(X) -> p(t) )  ==>  forall X Y ( B(X) & t=Y -> p(Y) )
+pub(crate) fn make_formula_completable(formula: Formula, var_names: &[String]) -> Option<Formula> {
+    match mirror_tau_star(formula).unbox() {
+        // lhs -> rhs
+        UnboxedFormula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs,
+            rhs,
+        } => make_implication_completable(lhs, rhs, var_names)
+            .map(|f| f.universal_closure_with_quantifier_joining()),
+
+        // forall X ( lhs -> rhs )
+        UnboxedFormula::QuantifiedFormula {
+            quantification:
+                Quantification {
+                    quantifier: Quantifier::Forall,
+                    ..
+                },
+            formula:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs,
+                    rhs,
+                },
+        } => make_implication_completable(*lhs, *rhs, var_names)
+            .map(|f| f.universal_closure_with_quantifier_joining()),
+
+        _ => None,
+    }
+}
+
 /// Assumes theory is obtained by applying natural translation to a set of regular rules
-fn make_completable(theory: Theory, var_names: &[String]) -> Option<Theory> {
+pub(crate) fn make_completable(theory: Theory, var_names: &[String]) -> Option<Theory> {
     let mut formulas = Vec::<Formula>::new();
 
-    for f in theory.formulas {
-        match mirror_tau_star(f).unbox() {
-            // lhs -> rhs
-            UnboxedFormula::BinaryFormula {
-                connective: BinaryConnective::Implication,
-                lhs,
-                rhs,
-            } => match make_implication_completable(lhs, rhs, var_names) {
-                Some(f) => formulas.push(f.universal_closure_with_quantifier_joining()),
-                None => return None,
-            },
-
-            // forall X ( lhs -> rhs )
-            UnboxedFormula::QuantifiedFormula {
-                quantification:
-                    Quantification {
-                        quantifier: Quantifier::Forall,
-                        ..
-                    },
-                formula:
-                    Formula::BinaryFormula {
-                        connective: BinaryConnective::Implication,
-                        lhs,
-                        rhs,
-                    },
-            } => match make_implication_completable(*lhs, *rhs, var_names) {
-                Some(f) => formulas.push(f.universal_closure_with_quantifier_joining()),
-                None => return None,
-            },
-
-            _ => return None,
+    for formula in theory.formulas {
+        match make_formula_completable(formula, var_names) {
+            Some(f) => formulas.push(f),
+            None => return None,
         }
     }
 

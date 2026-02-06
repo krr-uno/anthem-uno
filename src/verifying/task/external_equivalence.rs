@@ -2,7 +2,7 @@ use {
     crate::{
         analyzing::{private_recursion::PrivateRecursion, tightness::Tightness},
         breaking::fol::sigma_0::ht::break_equivalences_annotated_formula,
-        command_line::arguments::Decomposition,
+        command_line::arguments::{Decomposition, FormulaRepresentation},
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
@@ -219,12 +219,6 @@ impl Display for ExternalEquivalenceTaskError {
             ExternalEquivalenceTaskError::ProofOutlineError(_) => {
                 writeln!(f, "the given proof outline contains errors")
             }
-            // ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation => {
-            //     writeln!(
-            //         f,
-            //         "tau-star is the only formula-representation currently supported for external equivalence"
-            //     )
-            // }
             ExternalEquivalenceTaskError::SpecificationContainsUnsupportedRoles(formula) => {
                 writeln!(
                     f,
@@ -243,6 +237,7 @@ pub struct ExternalEquivalenceTask {
     pub proof_outline: fol::Specification,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
+    pub formula_representation: FormulaRepresentation,
     pub bypass_tightness: bool,
     pub simplify: bool,
     pub break_equivalences: bool,
@@ -517,11 +512,14 @@ impl Task for ExternalEquivalenceTask {
 
         let theory_translate = |program: asp::Program| {
             // TODO: allow more formula representations beyond tau-star
-            let mut theory = program
-                .tau_star()
-                .replace_placeholders(&placeholders)
-                .completion(self.user_guide.input_predicates())
-                .expect("tau_star did not create a completable theory");
+            let mut theory = match self.formula_representation {
+                FormulaRepresentation::Mu => todo!("mu is not implemented for mg-cl language yet"),
+                FormulaRepresentation::TauStar => program
+                    .tau_star()
+                    .replace_placeholders(&placeholders)
+                    .completion(self.user_guide.input_predicates())
+                    .expect("tau_star did not create a completable theory"),
+            };
 
             if self.simplify {
                 let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
