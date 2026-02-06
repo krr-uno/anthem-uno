@@ -447,20 +447,172 @@ pub(crate) fn natural_rule(r: &asp::Rule) -> Option<Formula> {
 }
 
 // forall X ( B(X) -> forall Y (v(Y) -> p(Y)) )  ==>  forall X Y ( B(X) & v(Y) -> p(Y) )
-fn move_values_to_antecedent(formula: Formula) -> Option<Formula> {
-    todo!()
+fn move_values_to_antecedent(formula: Formula) -> Formula {
+    let original = formula.clone();
+
+    match formula.unbox() {
+        // q -> forall Y (v(Y) -> p(Y))
+        UnboxedFormula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: body,
+            rhs:
+                Formula::QuantifiedFormula {
+                    quantification:
+                        Quantification {
+                            quantifier: Quantifier::Forall,
+                            variables,
+                        },
+                    formula,
+                },
+        } => match formula.unbox() {
+            UnboxedFormula::BinaryFormula {
+                connective: BinaryConnective::Implication,
+                lhs: values,
+                rhs: head,
+            } => Formula::QuantifiedFormula {
+                quantification: Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables,
+                },
+                formula: Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::conjoin([body, values]).into(),
+                    rhs: head.into(),
+                }
+                .into(),
+            },
+
+            _ => original,
+        },
+
+        // forall X ( B(X) -> forall Y (v(Y) -> p(Y)) )
+        UnboxedFormula::QuantifiedFormula {
+            quantification:
+                Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables: outer_variables,
+                },
+            formula:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: body,
+                    rhs,
+                },
+        } => match rhs.unbox() {
+            UnboxedFormula::QuantifiedFormula {
+                quantification:
+                    Quantification {
+                        quantifier: Quantifier::Forall,
+                        variables: mut inner_variables,
+                    },
+                formula:
+                    Formula::BinaryFormula {
+                        connective: BinaryConnective::Implication,
+                        lhs: values,
+                        rhs: head,
+                    },
+            } => {
+                let new_implication = Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::conjoin([*body, *values]).into(),
+                    rhs: head,
+                };
+
+                inner_variables.extend(outer_variables);
+
+                Formula::QuantifiedFormula {
+                    quantification: Quantification {
+                        quantifier: Quantifier::Forall,
+                        variables: inner_variables,
+                    },
+                    formula: new_implication.into(),
+                }
+            }
+
+            _ => original,
+        },
+
+        _ => original,
+    }
 }
 
 // B -> A v ~A  ==> B & ~~A -> A
-fn restructure_disjunctive_head(formula: Formula) -> Option<Formula> {
-    todo!()
+fn restructure_disjunctive_head(formula: Formula) -> Formula {
+    let original = formula.clone();
+
+    match formula.unbox() {
+        UnboxedFormula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: body,
+            rhs:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Disjunction,
+                    lhs: atom,
+                    rhs: negated_atom,
+                },
+        } => Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: Formula::BinaryFormula {
+                connective: BinaryConnective::Conjunction,
+                lhs: body.into(),
+                rhs: Formula::UnaryFormula {
+                    connective: fol::UnaryConnective::Negation,
+                    formula: negated_atom,
+                }
+                .into(),
+            }
+            .into(),
+            rhs: atom,
+        },
+
+        UnboxedFormula::QuantifiedFormula {
+            quantification:
+                Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables,
+                },
+            formula:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: body,
+                    rhs,
+                },
+        } => match rhs.unbox() {
+            UnboxedFormula::BinaryFormula {
+                connective: BinaryConnective::Disjunction,
+                lhs: atom,
+                rhs: negated_atom,
+            } => Formula::QuantifiedFormula {
+                quantification: Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables,
+                },
+                formula: Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::BinaryFormula {
+                        connective: BinaryConnective::Conjunction,
+                        lhs: body,
+                        rhs: Formula::UnaryFormula {
+                            connective: fol::UnaryConnective::Negation,
+                            formula: negated_atom.into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    rhs: atom.into(),
+                }
+                .into(),
+            },
+
+            _ => original,
+        },
+
+        _ => original,
+    }
 }
 
-fn mirror_tau_star(formula: Formula) -> Option<Formula> {
-    match move_values_to_antecedent(formula) {
-        Some(formula) => restructure_disjunctive_head(formula),
-        None => None,
-    }
+fn mirror_tau_star(formula: Formula) -> Formula {
+    restructure_disjunctive_head(move_values_to_antecedent(formula))
 }
 
 fn make_implication_completable(
@@ -523,46 +675,41 @@ fn make_implication_completable(
 }
 
 // forall X ( B(X) -> p(t) )  ==>  forall X Y ( B(X) & t=Y -> p(Y) )
-/// Assumes theory is obtained by applying the mirror_tau_star normalization
-/// to a theory representing the natural translation of a set of regular rules
+/// Assumes theory is obtained by applying natural translation to a set of regular rules
 fn make_completable(theory: Theory, var_names: &[String]) -> Option<Theory> {
     let mut formulas = Vec::<Formula>::new();
 
     for f in theory.formulas {
-        match mirror_tau_star(f) {
-            Some(formula) => match formula.unbox() {
-                // lhs -> rhs
-                UnboxedFormula::BinaryFormula {
-                    connective: BinaryConnective::Implication,
-                    lhs,
-                    rhs,
-                } => match make_implication_completable(lhs, rhs, var_names) {
-                    Some(f) => formulas.push(f),
-                    None => return None,
-                },
-
-                // forall X ( lhs -> rhs )
-                UnboxedFormula::QuantifiedFormula {
-                    quantification:
-                        Quantification {
-                            quantifier: Quantifier::Forall,
-                            ..
-                        },
-                    formula:
-                        Formula::BinaryFormula {
-                            connective: BinaryConnective::Implication,
-                            lhs,
-                            rhs,
-                        },
-                } => match make_implication_completable(*lhs, *rhs, var_names) {
-                    Some(f) => formulas.push(f.universal_closure_with_quantifier_joining()),
-                    None => return None,
-                },
-
-                _ => return None,
+        match mirror_tau_star(f).unbox() {
+            // lhs -> rhs
+            UnboxedFormula::BinaryFormula {
+                connective: BinaryConnective::Implication,
+                lhs,
+                rhs,
+            } => match make_implication_completable(lhs, rhs, var_names) {
+                Some(f) => formulas.push(f),
+                None => return None,
             },
 
-            None => return None,
+            // forall X ( lhs -> rhs )
+            UnboxedFormula::QuantifiedFormula {
+                quantification:
+                    Quantification {
+                        quantifier: Quantifier::Forall,
+                        ..
+                    },
+                formula:
+                    Formula::BinaryFormula {
+                        connective: BinaryConnective::Implication,
+                        lhs,
+                        rhs,
+                    },
+            } => match make_implication_completable(*lhs, *rhs, var_names) {
+                Some(f) => formulas.push(f.universal_closure_with_quantifier_joining()),
+                None => return None,
+            },
+
+            _ => return None,
         }
     }
 
