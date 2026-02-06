@@ -631,7 +631,8 @@ fn make_implication_completable(
         Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)) => {
             let mut new_vars = vec![];
             let mut new_terms = vec![];
-            let mut val_t = vec![];
+            let mut val_t = vec![antecedent];
+
             for (i, term) in atom.terms.into_iter().enumerate() {
                 let var = fol::GeneralTerm::Variable(var_names[i].clone());
                 new_terms.push(var.clone());
@@ -650,22 +651,13 @@ fn make_implication_completable(
                 });
             }
 
-            val_t.push(antecedent);
-            let new_head = fol::Atom {
-                predicate_symbol: atom.predicate_symbol,
-                terms: new_terms,
-            };
-
-            Some(Formula::QuantifiedFormula {
-                quantification: Quantification {
-                    quantifier: Quantifier::Forall,
-                    variables: new_vars,
-                },
-                formula: Formula::BinaryFormula {
-                    connective: BinaryConnective::Implication,
-                    lhs: Formula::conjoin(val_t).into(),
-                    rhs: Formula::AtomicFormula(fol::AtomicFormula::Atom(new_head)).into(),
-                }
+            Some(Formula::BinaryFormula {
+                connective: BinaryConnective::Implication,
+                lhs: Formula::conjoin(val_t).into(),
+                rhs: Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
+                    predicate_symbol: atom.predicate_symbol,
+                    terms: new_terms,
+                }))
                 .into(),
             })
         }
@@ -687,7 +679,7 @@ fn make_completable(theory: Theory, var_names: &[String]) -> Option<Theory> {
                 lhs,
                 rhs,
             } => match make_implication_completable(lhs, rhs, var_names) {
-                Some(f) => formulas.push(f),
+                Some(f) => formulas.push(f.universal_closure_with_quantifier_joining()),
                 None => return None,
             },
 
@@ -761,6 +753,9 @@ mod tests {
             is_term_regular_of_first_kind, is_term_regular_of_second_kind, natural_b_atom,
             natural_basic_head, natural_choice_head, natural_comparison, natural_head_atom,
             natural_head_interval, natural_rule, p2f, p2f_int_term,
+        },
+        crate::translating::formula_representation::natural::{
+            move_values_to_antecedent, natural, restructure_disjunctive_head,
         },
         indexmap::IndexSet,
     };
@@ -1565,6 +1560,158 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_move_values_to_antecedent() {
+        for (source, target) in [
+            ("#true -> a", "#true -> a"),
+            ("forall X (#true -> p(X))", "forall X (#true -> p(X))"),
+            ("b -> a", "b -> a"),
+            ("forall X (q(X) -> p(X))", "forall X (q(X) -> p(X))"),
+            ("forall X (X = 3 -> p(X))", "forall X (X = 3 -> p(X))"),
+            (
+                "forall X (X = 3 -> p(X) or not p(X))",
+                "forall X (X = 3 -> p(X) or not p(X))",
+            ),
+            (
+                "forall N0 (#true -> forall N1$i (1 <= N1$i <= 2-> p(N1$i, N0)))",
+                "forall N1$i N0 (#true and 1 <= N1$i <= 2 -> p(N1$i, N0))",
+            ),
+            (
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+            ), // example (1) from paper [1]
+            (
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+            ), // example from paper [1]
+            (
+                "forall X$i Y$i Z (p(X$i, Y$i, Z) -> forall N0$i N1$i (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i) -> q(N0$i, N1$i)))",
+                "forall N0$i N1$i X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) -> q(N0$i, N1$i))",
+            ), //( example from paper [1]
+            (
+                "forall X$i Y (p(X$i, Y) -> forall N0$i (1 <= N0$i <= X$i -> q(N0$i, Y) or not q(N0$i, Y)))",
+                "forall N0$i X$i Y ((p(X$i, Y) and 1 <= N0$i <= X$i) -> (q(N0$i, Y) or not q(N0$i, Y)))",
+            ), // example from paper [1]
+            (
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+            ), // example (6) from paper [2]
+            (
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+            ), // example (7) from paper [2]
+            (
+                "#true -> forall N0$ N1$ ( 1 <= N0$ <= 10 and (1 <= N1$ <= 10-2) -> (h(N0$, N1$) or not h(N0$, N1$)))",
+                "forall N0$ N1$ (#true and (1 <= N0$ <= 10 and (1 <= N1$ <= 10-2)) -> (h(N0$, N1$) or not h(N0$, N1$)))",
+            ), // Inspired by Tiling example
+            (
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+            ), // Inspired by Tiling
+        ] {
+            let source_formula = move_values_to_antecedent(source.parse().unwrap());
+            let source = source_formula.to_string();
+            let target_formula: Formula = target.parse().unwrap();
+            let target = target_formula.to_string();
+            assert_eq!(
+                source_formula, target_formula,
+                "assertion `move_values_to_antecedent` failed:\n source:\n{source:?}\n target:\n{target:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_restructure_disjunctive_head() {
+        for (source, target) in [
+            ("#true -> a", "#true -> a"),
+            ("forall X (#true -> p(X))", "forall X (#true -> p(X))"),
+            ("b -> a or not a", "b and not not a -> a"),
+            ("forall X (q(X) -> p(X))", "forall X (q(X) -> p(X))"),
+            ("forall X (X = 3 -> p(X))", "forall X (X = 3 -> p(X))"),
+            (
+                "forall X (X = 3 -> p(X) or not p(X))",
+                "forall X (X = 3 and not not p(X) -> p(X))",
+            ),
+            (
+                "forall N1$i N0 (#true and 1 <= N1$i <= 2 -> p(N1$i, N0))",
+                "forall N1$i N0 (#true and 1 <= N1$i <= 2 -> p(N1$i, N0))",
+            ),
+            (
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+            ), // example (1) from paper [1]
+            (
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+            ), // example from paper [1]
+            (
+                "forall N0$i N1$i X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) -> q(N0$i, N1$i))",
+                "forall N0$i N1$i X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) -> q(N0$i, N1$i))",
+            ), //( example from paper [1]
+            (
+                "forall N0$i X$i Y ( (p(X$i, Y) and 1 <= N0$i <= X$i) -> (q(N0$i, Y) or not q(N0$i, Y)))",
+                "forall N0$i X$i Y ( (p(X$i, Y) and 1 <= N0$i <= X$i and not not q(N0$i, Y)) -> q(N0$i, Y) )",
+            ), // example from paper [1]
+            (
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+            ), // example (6) from paper [2]
+            (
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+            ), // example (7) from paper [2]
+            (
+                "forall N0$ N1$ (#true and (1 <= N0$ <= 10 and (1 <= N1$ <= 10-2)) -> (h(N0$, N1$) or not h(N0$, N1$)))",
+                "forall N0$ N1$ (#true and (1 <= N0$ <= 10 and (1 <= N1$ <= 10-2)) and not not h(N0$, N1$) -> h(N0$, N1$))",
+            ), // Inspired by Tiling example
+            (
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3) and not not place(X$i, Y$i, T$i)) -> place(X$i, Y$i, T$i))",
+            ), // Inspired by Tiling
+        ] {
+            let source_formula = restructure_disjunctive_head(source.parse().unwrap());
+            let source = source_formula.to_string();
+            let target_formula: Formula = target.parse().unwrap();
+            let target = target_formula.to_string();
+            assert_eq!(
+                source_formula, target_formula,
+                "assertion `restructure_disjunctive_head` failed:\n source:\n{source:?}\n target:\n{target:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_make_completable() {
+        for (source, target) in [
+            (
+                "a. p(X). p(X) :- q(X).",
+                "#true -> a. forall V X (#true and X = V -> p(V)). forall V X (q(X) and X = V -> p(V))."
+            ),
+            (
+                "p(X) :- X = 3. {p(X)} :- X = 3. p(1..2, N0).", 
+                "forall V X (X = 3 and X = V -> p(V)). forall V X (X = 3 and not not p(X) and X = V -> p(V)). forall N0 N1$i V V1 (#true and 1 <= N1$i <= 2 and N1$i = V and N0 = V1 -> p(V, V1))."
+            ),
+            (
+                "q(X+1) :- p(X). :- p(X,Y,Z), X < Y, Y=1..Z.",
+                "forall V X$i (p(X$i) and X$i + 1 = V -> q(V)). forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)."
+            ),
+            (
+                "q(1..X, 1..Y) :- p(X,Y,Z). p(V,Y) :- V = Y, Y = 1..2.", 
+                "forall N0$i N1$i V1 V2 X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) and N0$i = V1 and N1$i = V2 -> q(V1, V2)).
+                forall V V1 V2 Y$i ( V = Y$i and (1 <= Y$i  <= 2) and V = V1 and Y$i = V2 -> p(V1, V2))."
+            ),
+        ] {
+            let source_theory = natural(source.parse().unwrap(), true).unwrap();
+            let source = source_theory.to_string();
+            let target_theory: fol::Theory = target.parse().unwrap();
+            let target = target_theory.to_string();
+            assert_eq!(
+                source_theory, target_theory,
+                "assertion `make_completable` failed:\n source:\n{source:?}\n target:\n{target:?}",
+            );
         }
     }
 }
