@@ -1,7 +1,10 @@
 use {
-    crate::verifying::{
-        problem::Problem,
-        prover::{Prover, Report, Status, StatusExtractionError},
+    crate::{
+        command_line::arguments::{Backend, InductionSchedule},
+        verifying::{
+            problem::Problem,
+            prover::{Prover, Report, Status, StatusExtractionError},
+        },
     },
     std::{
         fmt::{self, Display},
@@ -84,7 +87,8 @@ pub struct Vampire {
     pub time_limit: usize,
     pub instances: usize,
     pub cores: usize,
-    pub induction: bool,
+    pub backend: Backend,
+    pub induction: InductionSchedule,
 }
 
 impl Prover for Vampire {
@@ -122,12 +126,28 @@ impl Prover for Vampire {
             &cores,
         ]);
 
-        if self.induction {
-            arguments.push("--schedule");
-            arguments.push("induction");
-        }
+        match self.induction {
+            InductionSchedule::None => (),
+            InductionSchedule::Basic => {
+                arguments.push("--schedule");
+                arguments.push("induction");
+            }
+            InductionSchedule::Integer => {
+                arguments.push("--schedule");
+                arguments.push("integer_induction");
+            }
+            InductionSchedule::Oeis => {
+                arguments.push("--schedule");
+                arguments.push("intind_oeis");
+            }
+        };
 
-        let mut child = Command::new("vampire")
+        let program = match self.backend {
+            Backend::Vampire => "vampire",
+            Backend::Vampire5 => "vampire5",
+        };
+
+        let mut child = Command::new(program)
             .args(arguments)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

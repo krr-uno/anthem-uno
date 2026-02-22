@@ -283,6 +283,7 @@ pub fn main() -> Result<()> {
             files,
             dialect,
             formula_representation,
+            backend,
         } => {
             let start_time = Instant::now();
 
@@ -423,10 +424,11 @@ pub fn main() -> Result<()> {
 
             if !no_proof_search {
                 let prover = Vampire {
-                    time_limit,
                     instances: prover_instances,
                     cores: prover_cores,
+                    backend,
                     induction,
+                    time_limit,
                 };
 
                 let problems = problems.into_iter().inspect(|problem| {

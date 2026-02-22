@@ -94,6 +94,14 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         direction: Direction,
 
+        /// The theorem proving backend to use
+        #[arg(long, value_enum, default_value_t)]
+        backend: Backend,
+
+        /// Instruct Vampire to schedule induction
+        #[arg(long, value_enum, default_value_t)]
+        induction: InductionSchedule,
+
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
         bypass_tightness: bool,
@@ -113,10 +121,6 @@ pub enum Command {
         /// Omit display of system runtimes
         #[arg(long, action)]
         no_timing: bool,
-
-        /// Instruct Vampire to schedule induction
-        #[arg(long, action)]
-        induction: bool,
 
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
@@ -163,6 +167,22 @@ pub enum Dialect {
     MiniGringo,
     #[default]
     MiniGringoCL,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Backend {
+    #[default]
+    Vampire,
+    Vampire5,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum InductionSchedule {
+    #[default]
+    None,
+    Basic,
+    Integer,
+    Oeis,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
