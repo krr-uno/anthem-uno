@@ -273,6 +273,7 @@ pub fn main() -> Result<()> {
             bypass_tightness,
             no_simplify,
             no_eq_break,
+            induction,
             no_proof_search,
             no_timing,
             time_limit,
@@ -425,6 +426,7 @@ pub fn main() -> Result<()> {
                     time_limit,
                     instances: prover_instances,
                     cores: prover_cores,
+                    induction,
                 };
 
                 let problems = problems.into_iter().inspect(|problem| {
