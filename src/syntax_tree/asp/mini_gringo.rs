@@ -7,7 +7,11 @@ use {
             RelationParser, RuleParser, SignParser, TermParser, UnaryOperatorParser,
             VariableParser,
         },
-        syntax_tree::{Node, impl_node},
+        syntax_tree::{
+            Node,
+            asp::{self, mini_gringo_cl},
+            impl_node,
+        },
     },
     derive_more::derive::IntoIterator,
     indexmap::IndexSet,
@@ -34,10 +38,27 @@ impl PrecomputedTerm {
 
 impl_node!(PrecomputedTerm, Format, PrecomputedTermParser);
 
+impl From<asp::mini_gringo_cl::PrecomputedTerm> for PrecomputedTerm {
+    fn from(value: asp::mini_gringo_cl::PrecomputedTerm) -> Self {
+        match value {
+            asp::mini_gringo_cl::PrecomputedTerm::Infimum => PrecomputedTerm::Infimum,
+            asp::mini_gringo_cl::PrecomputedTerm::Numeral(n) => PrecomputedTerm::Numeral(n),
+            asp::mini_gringo_cl::PrecomputedTerm::Symbol(s) => PrecomputedTerm::Symbol(s),
+            asp::mini_gringo_cl::PrecomputedTerm::Supremum => PrecomputedTerm::Supremum,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Variable(pub String);
 
 impl_node!(Variable, Format, VariableParser);
+
+impl From<asp::mini_gringo_cl::Variable> for Variable {
+    fn from(value: asp::mini_gringo_cl::Variable) -> Self {
+        Variable(value.0)
+    }
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UnaryOperator {
@@ -45,6 +66,19 @@ pub enum UnaryOperator {
 }
 
 impl_node!(UnaryOperator, Format, UnaryOperatorParser);
+
+impl TryFrom<mini_gringo_cl::UnaryOperator> for UnaryOperator {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::UnaryOperator) -> Result<Self, Self::Error> {
+        match value {
+            mini_gringo_cl::UnaryOperator::Negative => Ok(UnaryOperator::Negative),
+            mini_gringo_cl::UnaryOperator::AbsoluteValue => {
+                Err("mini-gringo programs do not support absolute values")
+            }
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BinaryOperator {
@@ -57,6 +91,19 @@ pub enum BinaryOperator {
 }
 
 impl_node!(BinaryOperator, Format, BinaryOperatorParser);
+
+impl From<asp::mini_gringo_cl::BinaryOperator> for BinaryOperator {
+    fn from(value: asp::mini_gringo_cl::BinaryOperator) -> Self {
+        match value {
+            mini_gringo_cl::BinaryOperator::Add => BinaryOperator::Add,
+            mini_gringo_cl::BinaryOperator::Subtract => BinaryOperator::Subtract,
+            mini_gringo_cl::BinaryOperator::Multiply => BinaryOperator::Multiply,
+            mini_gringo_cl::BinaryOperator::Divide => BinaryOperator::Divide,
+            mini_gringo_cl::BinaryOperator::Modulo => BinaryOperator::Modulo,
+            mini_gringo_cl::BinaryOperator::Interval => BinaryOperator::Interval,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
@@ -74,6 +121,43 @@ pub enum Term {
 }
 
 impl_node!(Term, Format, TermParser);
+
+impl TryFrom<mini_gringo_cl::Term> for Term {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Term) -> Result<Self, Self::Error> {
+        match value {
+            mini_gringo_cl::Term::PrecomputedTerm(t) => Ok(Term::PrecomputedTerm(t.into())),
+            mini_gringo_cl::Term::Variable(v) => Ok(Term::Variable(v.into())),
+            mini_gringo_cl::Term::UnaryOperation {
+                op: op_cl,
+                arg: arg_cl,
+            } => {
+                let op: UnaryOperator = op_cl.try_into()?;
+                let arg_mg: Term = (*arg_cl).try_into()?;
+                Ok(Self::UnaryOperation {
+                    op,
+                    arg: arg_mg.into(),
+                })
+            }
+            mini_gringo_cl::Term::BinaryOperation {
+                op: op_cl,
+                lhs: lhs_cl,
+                rhs: rhs_cl,
+            } => {
+                let op: BinaryOperator = op_cl.into();
+                let lhs_mg: Term = (*lhs_cl).try_into()?;
+                let rhs_mg: Term = (*rhs_cl).try_into()?;
+
+                Ok(Self::BinaryOperation {
+                    op,
+                    lhs: lhs_mg.into(),
+                    rhs: rhs_mg.into(),
+                })
+            }
+        }
+    }
+}
 
 impl Term {
     pub fn variables(&self) -> IndexSet<Variable> {
@@ -129,6 +213,15 @@ impl From<crate::syntax_tree::GenericPredicate> for Predicate {
     }
 }
 
+impl From<asp::mini_gringo_cl::Predicate> for Predicate {
+    fn from(value: asp::mini_gringo_cl::Predicate) -> Self {
+        Predicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Atom {
     pub predicate_symbol: String,
@@ -162,6 +255,25 @@ impl Atom {
     }
 }
 
+impl TryFrom<mini_gringo_cl::Atom> for Atom {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Atom) -> Result<Self, Self::Error> {
+        let mut mg_terms = Vec::new();
+        for term in value.terms {
+            match Term::try_from(term) {
+                Ok(t) => mg_terms.push(t),
+                Err(e) => return Err(e),
+            }
+        }
+
+        Ok(Atom {
+            predicate_symbol: value.predicate_symbol,
+            terms: mg_terms,
+        })
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Sign {
     NoSign,
@@ -170,6 +282,16 @@ pub enum Sign {
 }
 
 impl_node!(Sign, Format, SignParser);
+
+impl From<mini_gringo_cl::Sign> for Sign {
+    fn from(value: mini_gringo_cl::Sign) -> Self {
+        match value {
+            mini_gringo_cl::Sign::NoSign => Sign::NoSign,
+            mini_gringo_cl::Sign::Negation => Sign::Negation,
+            mini_gringo_cl::Sign::DoubleNegation => Sign::DoubleNegation,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Literal {
@@ -193,6 +315,20 @@ impl Literal {
     }
 }
 
+impl TryFrom<mini_gringo_cl::Literal> for Literal {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Literal) -> Result<Self, Self::Error> {
+        match Atom::try_from(value.atom) {
+            Ok(atom) => Ok(Literal {
+                sign: value.sign.into(),
+                atom,
+            }),
+            Err(e) => Err(e),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Relation {
     Equal,
@@ -204,6 +340,19 @@ pub enum Relation {
 }
 
 impl_node!(Relation, Format, RelationParser);
+
+impl From<asp::mini_gringo_cl::Relation> for Relation {
+    fn from(value: asp::mini_gringo_cl::Relation) -> Self {
+        match value {
+            mini_gringo_cl::Relation::Equal => Relation::Equal,
+            mini_gringo_cl::Relation::NotEqual => Relation::NotEqual,
+            mini_gringo_cl::Relation::Less => Relation::Less,
+            mini_gringo_cl::Relation::LessEqual => Relation::LessEqual,
+            mini_gringo_cl::Relation::Greater => Relation::Greater,
+            mini_gringo_cl::Relation::GreaterEqual => Relation::GreaterEqual,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Comparison {
@@ -225,6 +374,20 @@ impl Comparison {
         let mut functions = self.lhs.function_constants();
         functions.extend(self.rhs.function_constants());
         functions
+    }
+}
+
+impl TryFrom<mini_gringo_cl::Comparison> for Comparison {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Comparison) -> Result<Self, Self::Error> {
+        let lhs: Term = value.lhs.try_into()?;
+        let rhs: Term = value.rhs.try_into()?;
+        Ok(Comparison {
+            relation: value.relation.into(),
+            lhs,
+            rhs,
+        })
     }
 }
 
@@ -276,6 +439,23 @@ impl AtomicFormula {
     }
 }
 
+impl TryFrom<mini_gringo_cl::AtomicFormula> for AtomicFormula {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::AtomicFormula) -> Result<Self, Self::Error> {
+        match value {
+            mini_gringo_cl::AtomicFormula::Literal(literal) => {
+                let l: Literal = literal.try_into()?;
+                Ok(AtomicFormula::Literal(l))
+            }
+            mini_gringo_cl::AtomicFormula::Comparison(comparison) => {
+                let c: Comparison = comparison.try_into()?;
+                Ok(AtomicFormula::Comparison(c))
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Head {
     Basic(Atom),
@@ -323,6 +503,24 @@ impl Head {
         match &self {
             Head::Basic(a) | Head::Choice(a) => a.function_constants(),
             Head::Falsity => IndexSet::new(),
+        }
+    }
+}
+
+impl TryFrom<mini_gringo_cl::Head> for Head {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Head) -> Result<Self, Self::Error> {
+        match value {
+            mini_gringo_cl::Head::Basic(atom) => {
+                let a: Atom = atom.try_into()?;
+                Ok(Head::Basic(a))
+            }
+            mini_gringo_cl::Head::Choice(atom) => {
+                let a: Atom = atom.try_into()?;
+                Ok(Head::Choice(a))
+            }
+            mini_gringo_cl::Head::Falsity => Ok(Head::Falsity),
         }
     }
 }
@@ -385,6 +583,38 @@ impl FromIterator<AtomicFormula> for Body {
     }
 }
 
+impl TryFrom<mini_gringo_cl::Body> for Body {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Body) -> Result<Self, Self::Error> {
+        let mut formulas = Vec::new();
+        for formula in value.formulas {
+            match formula {
+                mini_gringo_cl::BodyLiteral::ConditionalLiteral(conditional_literal) => {
+                    let is_basic = conditional_literal.basic();
+                    match conditional_literal.head {
+                        mini_gringo_cl::ConditionalHead::AtomicFormula(atomic_formula) => {
+                            if is_basic {
+                                let af: AtomicFormula = atomic_formula.try_into()?;
+                                formulas.push(af);
+                            } else {
+                                return Err(
+                                    "mini-gringo programs cannot contain conditional literals",
+                                );
+                            }
+                        }
+                        mini_gringo_cl::ConditionalHead::Falsity => {
+                            return Err("mini-gringo rule bodies cannot contain #false");
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Body { formulas })
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Rule {
     pub head: Head,
@@ -424,6 +654,16 @@ impl Rule {
         }
         terms.extend(self.body.terms());
         terms
+    }
+}
+
+impl TryFrom<mini_gringo_cl::Rule> for Rule {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Rule) -> Result<Self, Self::Error> {
+        let head: Head = value.head.try_into()?;
+        let body: Body = value.body.try_into()?;
+        Ok(Rule { head, body })
     }
 }
 
@@ -487,6 +727,21 @@ impl FromIterator<Rule> for Program {
         Program {
             rules: iter.into_iter().collect(),
         }
+    }
+}
+
+impl TryFrom<mini_gringo_cl::Program> for Program {
+    type Error = &'static str;
+
+    fn try_from(value: mini_gringo_cl::Program) -> Result<Self, Self::Error> {
+        let mut rules = Vec::new();
+        for rule in value.rules {
+            match Rule::try_from(rule) {
+                Ok(r) => rules.push(r),
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(Program { rules })
     }
 }
 
