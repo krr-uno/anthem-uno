@@ -1,6 +1,6 @@
 use {
     crate::{
-        convenience::apply::Apply as _,
+        convenience::{apply::Apply as _, variable_selection::VariableSelection},
         formatting::fol::sigma_0::default::Format,
         parsing::fol::sigma_0::pest::{
             AnnotatedFormulaParser, AtomParser, AtomicFormulaParser, BinaryConnectiveParser,
@@ -12,7 +12,7 @@ use {
             UserGuideParser, VariableParser,
         },
         simplifying::fol::sigma_0::intuitionistic::join_nested_quantifiers,
-        syntax_tree::{Node, impl_node},
+        syntax_tree::{GenericPredicate, Node, impl_node},
         verifying::problem,
     },
     clap::ValueEnum,
@@ -24,6 +24,7 @@ use {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UnaryOperator {
     Negative,
+    AbsoluteValue,
 }
 
 impl_node!(UnaryOperator, Format, UnaryOperatorParser);
@@ -297,6 +298,24 @@ impl From<crate::syntax_tree::asp::mini_gringo::Predicate> for Predicate {
     }
 }
 
+impl From<crate::syntax_tree::asp::mini_gringo_cl::Predicate> for Predicate {
+    fn from(value: crate::syntax_tree::asp::mini_gringo_cl::Predicate) -> Self {
+        Predicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
+impl From<GenericPredicate> for Predicate {
+    fn from(value: GenericPredicate) -> Self {
+        Predicate {
+            symbol: value.symbol,
+            arity: value.arity,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Atom {
     pub predicate_symbol: String,
@@ -373,6 +392,21 @@ impl From<crate::syntax_tree::asp::mini_gringo::Relation> for Relation {
             crate::syntax_tree::asp::mini_gringo::Relation::Less => Relation::Less,
             crate::syntax_tree::asp::mini_gringo::Relation::GreaterEqual => Relation::GreaterEqual,
             crate::syntax_tree::asp::mini_gringo::Relation::LessEqual => Relation::LessEqual,
+        }
+    }
+}
+
+impl From<crate::syntax_tree::asp::mini_gringo_cl::Relation> for Relation {
+    fn from(value: crate::syntax_tree::asp::mini_gringo_cl::Relation) -> Self {
+        match value {
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::Equal => Relation::Equal,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::NotEqual => Relation::NotEqual,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::Greater => Relation::Greater,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::Less => Relation::Less,
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::GreaterEqual => {
+                Relation::GreaterEqual
+            }
+            crate::syntax_tree::asp::mini_gringo_cl::Relation::LessEqual => Relation::LessEqual,
         }
     }
 }
@@ -657,15 +691,6 @@ pub struct Variable {
 
 impl_node!(Variable, Format, VariableParser);
 
-impl Variable {
-    fn sequence(prefix: &Variable) -> impl Iterator<Item = Self> {
-        (1..).map(|i| Variable {
-            name: format!("{}{}", prefix.name, i),
-            sort: prefix.sort,
-        })
-    }
-}
-
 impl TryFrom<GeneralTerm> for Variable {
     type Error = GeneralTerm;
 
@@ -873,15 +898,15 @@ impl Formula {
 
                 let term_variables = term.variables();
                 let formula_variables = formula.free_variables();
+                let taken_variables: IndexSet<Variable> =
+                    term_variables.union(&formula_variables).cloned().collect();
 
                 for variable in quantification.variables {
                     if term_variables.contains(&variable) {
-                        let fresh_variable = Variable::sequence(&variable)
-                            .find(|candidate| {
-                                !term_variables.contains(candidate)
-                                    && !formula_variables.contains(candidate)
-                            })
-                            .unwrap();
+                        let fresh_variable = Variable {
+                            name: taken_variables.choose_fresh_variable(&variable.name),
+                            sort: variable.sort,
+                        };
 
                         formula = formula.substitute(variable, fresh_variable.clone().into());
                         variables.push(fresh_variable);
@@ -918,7 +943,8 @@ impl Formula {
     }
 
     pub fn universal_closure(self) -> Formula {
-        let variables = self.free_variables().into_iter().collect();
+        let mut variables: Vec<Variable> = self.free_variables().into_iter().collect();
+        variables.sort();
         self.quantify(Quantifier::Forall, variables)
     }
 
@@ -990,6 +1016,14 @@ impl Theory {
         self.into_iter()
             .map(|f| f.replace_placeholders(mapping))
             .collect()
+    }
+
+    pub fn variables(&self) -> IndexSet<Variable> {
+        let mut vars = IndexSet::new();
+        for formula in self {
+            vars.extend(formula.variables())
+        }
+        vars
     }
 }
 

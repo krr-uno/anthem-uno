@@ -1,7 +1,10 @@
 use {
-    crate::verifying::{
-        problem::Problem,
-        prover::{Prover, Report, Status, StatusExtractionError},
+    crate::{
+        command_line::arguments::{Backend, InductionSchedule},
+        verifying::{
+            problem::Problem,
+            prover::{Prover, Report, Status, StatusExtractionError},
+        },
     },
     std::{
         fmt::{self, Display},
@@ -84,6 +87,8 @@ pub struct Vampire {
     pub time_limit: usize,
     pub instances: usize,
     pub cores: usize,
+    pub backend: Backend,
+    pub induction: InductionSchedule,
 }
 
 impl Prover for Vampire {
@@ -109,15 +114,41 @@ impl Prover for Vampire {
     fn prove(&self, problem: Problem) -> Result<Self::Report, Self::Error> {
         let start_time = Instant::now();
 
-        let mut child = Command::new("vampire")
-            .args([
-                "--mode",
-                "casc",
-                "--time_limit",
-                &self.time_limit.to_string(),
-                "--cores",
-                &self.cores().to_string(),
-            ])
+        let cores = self.cores.to_string();
+        let time_limit = self.time_limit.to_string();
+
+        let mut arguments = Vec::from_iter([
+            "--mode",
+            "portfolio",
+            "--time_limit",
+            &time_limit,
+            "--cores",
+            &cores,
+        ]);
+
+        match self.induction {
+            InductionSchedule::None => (),
+            InductionSchedule::Basic => {
+                arguments.push("--schedule");
+                arguments.push("induction");
+            }
+            InductionSchedule::Integer => {
+                arguments.push("--schedule");
+                arguments.push("integer_induction");
+            }
+            InductionSchedule::Oeis => {
+                arguments.push("--schedule");
+                arguments.push("intind_oeis");
+            }
+        };
+
+        let program = match self.backend {
+            Backend::Vampire => "vampire",
+            Backend::Vampire5 => "vampire5",
+        };
+
+        let mut child = Command::new(program)
+            .args(arguments)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

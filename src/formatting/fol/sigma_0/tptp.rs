@@ -19,6 +19,7 @@ impl Display for Format<'_, UnaryOperator> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
             UnaryOperator::Negative => write!(f, "$uminus"),
+            UnaryOperator::AbsoluteValue => write!(f, "$abs"),
         }
     }
 }
@@ -376,6 +377,14 @@ mod tests {
             })
             .to_string(),
             "$difference($uminus(195), $uminus(N_i))"
+        );
+        assert_eq!(
+            Format(&IntegerTerm::UnaryOperation {
+                op: UnaryOperator::AbsoluteValue,
+                arg: IntegerTerm::Numeral(10).into(),
+            })
+            .to_string(),
+            "$abs(10)"
         );
     }
 

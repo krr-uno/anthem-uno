@@ -9,10 +9,13 @@ use {
             with_warnings::{Result, WithWarnings},
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            asp::{mini_gringo, mini_gringo_cl as asp},
+            fol::sigma_0 as fol,
+        },
         translating::{
             classical_reduction::completion::Completion as _,
-            formula_representation::tau_star::TauStar as _,
+            formula_representation::{mu::Mu as _, tau_star::TauStar as _},
         },
         verifying::{
             outline::{
@@ -167,7 +170,7 @@ pub struct InvalidPredicateErrorContent {
 
 #[derive(Error, Debug)]
 pub enum ExternalEquivalenceTaskError {
-    UnsupportedFormulaRepresentation,
+    UnsupportedFormulaRepresentation(String),
     NonTightProgram(asp::Program),
     ProgramContainsPrivateRecursion(asp::Program),
     InputOutputPredicatesOverlap(Vec<fol::Predicate>),
@@ -288,16 +291,16 @@ impl Display for ExternalEquivalenceTaskError {
             ExternalEquivalenceTaskError::ProofOutlineError(_) => {
                 writeln!(f, "a definition or lemma contains errors")
             }
-            ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation => {
-                writeln!(
-                    f,
-                    "tau-star is the only formula-representation currently supported for external equivalence"
-                )
-            }
             ExternalEquivalenceTaskError::SpecificationContainsUnsupportedRoles(formula) => {
                 writeln!(
                     f,
                     "the role of the following formula is not supported in specifications: {formula}"
+                )
+            }
+            ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(s) => {
+                writeln!(
+                    f,
+                    "program cannot be converted to a dialect for which mu is supported due to the following error: {s}"
                 )
             }
             ExternalEquivalenceTaskError::SpecificationDefinesOutputPredicates(predicates) => {
@@ -365,7 +368,8 @@ impl ExternalEquivalenceTask {
         &self,
         program: &asp::Program,
     ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
-        if program.is_tight() {
+        let intensional_predicates = program.predicates().into_iter().map(|p| p.into()).collect();
+        if program.is_tight(intensional_predicates) {
             Ok(WithWarnings::flawless(()))
         } else if self.bypass_tightness {
             Ok(WithWarnings::flawless(()).add_warning(
@@ -568,16 +572,6 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()))
     }
 
-    fn ensure_valid_formula_representation(
-        &self,
-    ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
-        if !matches!(self.formula_representation, FormulaRepresentation::TauStar) {
-            return Err(ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation);
-        }
-
-        Ok(WithWarnings::flawless(()))
-    }
-
     fn ensure_specification_roles_are_supported(
         &self,
         formulas: &Vec<fol::AnnotatedFormula>,
@@ -649,8 +643,6 @@ impl Task for ExternalEquivalenceTask {
     type Warning = ExternalEquivalenceTaskWarning;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
-        self.ensure_valid_formula_representation()?;
-
         let placeholders = self
             .user_guide
             .placeholders()
@@ -735,22 +727,41 @@ impl Task for ExternalEquivalenceTask {
         }
 
         let theory_translate = |program: asp::Program| {
-            // TODO: allow more formula representations beyond tau-star
-            let mut theory = program
-                .tau_star()
-                .replace_placeholders(&placeholders)
-                .completion(self.user_guide.input_predicates())
-                .expect("tau_star did not create a completable theory");
+            let translation = match self.formula_representation {
+                FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {
+                    Ok(prog) => Ok(prog
+                        .mu()
+                        .replace_placeholders(&placeholders)
+                        .completion(self.user_guide.input_predicates())
+                        .expect("mu did not create a completable theory")),
+                    Err(e) => Err(
+                        ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(
+                            e.to_string(),
+                        ),
+                    ),
+                },
+                FormulaRepresentation::TauStar => Ok(program
+                    .tau_star()
+                    .replace_placeholders(&placeholders)
+                    .completion(self.user_guide.input_predicates())
+                    .expect("tau_star did not create a completable theory")),
+            };
 
-            if self.simplify {
-                let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
-                theory = theory
-                    .into_iter()
-                    .map(|f| f.apply_fixpoint(&mut portfolio))
-                    .collect();
+            match translation {
+                Ok(mut theory) => {
+                    if self.simplify {
+                        let mut portfolio =
+                            [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
+                        theory = theory
+                            .into_iter()
+                            .map(|f| f.apply_fixpoint(&mut portfolio))
+                            .collect();
+                    }
+
+                    Ok(theory)
+                }
+                Err(e) => Err(e),
             }
-
-            theory
         };
 
         let control_translate = |theory: fol::Theory| {
@@ -783,11 +794,11 @@ impl Task for ExternalEquivalenceTask {
         };
 
         let left = match self.specification {
-            Either::Left(program) => control_translate(theory_translate(program)),
+            Either::Left(program) => control_translate(theory_translate(program)?),
             Either::Right(specification) => specification.replace_placeholders(&placeholders),
         };
 
-        let right = control_translate(theory_translate(self.program));
+        let right = control_translate(theory_translate(self.program)?);
 
         // TODO: Warn when a conflict between private predicates is encountered
         // TODO: Check if renaming creates new conflicts

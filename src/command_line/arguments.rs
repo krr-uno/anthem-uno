@@ -18,6 +18,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         property: Property,
 
+        /// The ASP dialect of the input
+        #[arg(long, value_enum, default_value_t)]
+        dialect: Dialect,
+
         /// The file to analyze
         input: Option<PathBuf>,
     },
@@ -46,6 +50,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         strategy: SimplificationStrategy,
 
+        // Display formulas as LaTex
+        #[arg(long, action)]
+        display_latex: bool,
+
         /// The file to simplify
         input: Option<PathBuf>,
     },
@@ -55,6 +63,10 @@ pub enum Command {
         /// The translation to use
         #[arg(long, value_enum)]
         with: Translation,
+
+        // Display formulas as LaTex
+        #[arg(long, action)]
+        display_latex: bool,
 
         /// The file to translate
         input: Option<PathBuf>,
@@ -70,13 +82,25 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         decomposition: Decomposition,
 
+        /// The ASP dialect of the input
+        #[arg(long, value_enum, default_value_t)]
+        dialect: Dialect,
+
+        /// The translation used to obtain the program's formula representation
+        #[arg(long, value_enum, default_value_t)]
+        formula_representation: FormulaRepresentation,
+
         /// The direction of the proof
         #[arg(long, value_enum, default_value_t)]
         direction: Direction,
 
-        /// The ASP-to-target-language translation to use
+        /// The theorem proving backend to use
         #[arg(long, value_enum, default_value_t)]
-        formula_representation: FormulaRepresentation,
+        backend: Backend,
+
+        /// Instruct Vampire to schedule induction
+        #[arg(long, value_enum, default_value_t)]
+        induction: InductionSchedule,
 
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
@@ -122,6 +146,43 @@ pub enum Command {
         #[arg(verbatim_doc_comment)]
         files: Vec<PathBuf>,
     },
+
+    /// Visualize a first-order formula
+    Visualize {
+        /// The property to visualize
+        #[arg(long, value_enum)]
+        property: Visualization,
+
+        /// The destination directory for the visualization file
+        #[arg(long)]
+        save_visualization: PathBuf,
+
+        /// The file to visualize
+        input: Option<PathBuf>,
+    },
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Dialect {
+    MiniGringo,
+    #[default]
+    MiniGringoCL,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Backend {
+    #[default]
+    Vampire,
+    Vampire5,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum InductionSchedule {
+    #[default]
+    None,
+    Basic,
+    Integer,
+    Oeis,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -131,8 +192,15 @@ pub enum Property {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Visualization {
+    Ast,
+    DependencyGraph,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ParseAs {
-    Program,
+    MiniGringoProgram,
+    MiniGringoCLProgram,
     Theory,
     Specification,
     UserGuide,

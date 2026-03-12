@@ -5,7 +5,18 @@
 // The other papers give examples of the translation which were used in the tests
 
 use {
-    crate::syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+    crate::{
+        convenience::{
+            unbox::{Unbox as _, fol::sigma_0::UnboxedFormula},
+            variable_selection::VariableSelection,
+        },
+        syntax_tree::{
+            asp::mini_gringo as asp,
+            fol::sigma_0::{
+                self as fol, BinaryConnective, Formula, Quantification, Quantifier, Theory,
+            },
+        },
+    },
     indexmap::IndexSet,
 };
 
@@ -162,7 +173,7 @@ fn int_variables(r: &asp::Rule) -> IndexSet<String> {
 fn natural_comparison(
     c: &asp::Comparison,
     int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+) -> Option<Formula> {
     // translate comparison
 
     let f_relation = c.relation.into();
@@ -176,7 +187,7 @@ fn natural_comparison(
             {
                 let t2 = p2f(t2, int_vars)?;
                 let t3 = p2f(t3, int_vars)?;
-                fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
+                Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                     term: t2,
                     guards: vec![
                         fol::Guard {
@@ -194,7 +205,7 @@ fn natural_comparison(
             }
         } else {
             let rhs = p2f(&c.rhs, int_vars)?;
-            fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
+            Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                 term: lhs,
                 guards: vec![fol::Guard {
                     relation: f_relation,
@@ -219,26 +230,26 @@ fn natural_b_atom(l: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Op
 fn natural_b_literal(
     l: &asp::Literal,
     int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+) -> Option<Formula> {
     let atom = natural_b_atom(&l.atom, int_vars)?;
     Some(match l.sign {
-        asp::Sign::NoSign => fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)),
-        asp::Sign::Negation => fol::Formula::UnaryFormula {
+        asp::Sign::NoSign => Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)),
+        asp::Sign::Negation => Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
-            formula: Box::new(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
+            formula: Box::new(Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
         },
-        asp::Sign::DoubleNegation => fol::Formula::UnaryFormula {
+        asp::Sign::DoubleNegation => Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
-            formula: Box::new(fol::Formula::UnaryFormula {
+            formula: Box::new(Formula::UnaryFormula {
                 connective: fol::UnaryConnective::Negation,
-                formula: Box::new(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
+                formula: Box::new(Formula::AtomicFormula(fol::AtomicFormula::Atom(atom))),
             }),
         },
     })
 }
 
-fn natural_body(b: &asp::Body, int_vars: &IndexSet<std::string::String>) -> Option<fol::Formula> {
-    let mut formulas = Vec::<fol::Formula>::new();
+fn natural_body(b: &asp::Body, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
+    let mut formulas = Vec::<Formula>::new();
     for f in b.formulas.iter() {
         match f {
             asp::AtomicFormula::Literal(l) => {
@@ -249,37 +260,19 @@ fn natural_body(b: &asp::Body, int_vars: &IndexSet<std::string::String>) -> Opti
             }
         }
     }
-    Some(fol::Formula::conjoin(formulas))
+    Some(Formula::conjoin(formulas))
 }
 
 fn fresh_variables_for_head_atom(a: &asp::Atom) -> Vec<String> {
-    let mut fresh_vars = Vec::<String>::new();
-    let taken_vars = a.variables();
-    let terms = &a.terms;
-    for (i, term) in terms.iter().enumerate() {
+    let mut fresh_vars = Vec::new();
+    let mut taken_vars = a.variables();
+    for term in a.terms.iter() {
         if !is_term_regular_of_first_kind(term) {
-            // create a new variable with N_i if not of first kind
-            let var_name = format!("N{i}");
-            // check if var_name is already taken
-            if !taken_vars.contains(&asp::Variable(var_name.clone())) {
-                // add var_name to fresh_vars
-                fresh_vars.push(var_name);
-            } else {
-                // var is taken already
-                // add a new variable with name N_i_j to fresh_vars
-                let mut j = 0;
-                loop {
-                    let var_name = format!("N{i}_{j}");
-                    if !taken_vars.contains(&asp::Variable(var_name.clone())) {
-                        fresh_vars.push(var_name);
-                        break;
-                    }
-                    j += 1;
-                }
-            }
+            let fresh_var = taken_vars.choose_fresh_variable("N");
+            fresh_vars.push(fresh_var.clone());
+            taken_vars.insert(asp::Variable(fresh_var));
         }
     }
-
     fresh_vars
 }
 
@@ -287,7 +280,7 @@ fn natural_head_atom(
     a: &asp::Atom,
     int_vars: &IndexSet<std::string::String>,
     fresh_vars: &[String],
-) -> Option<fol::Formula> {
+) -> Option<Formula> {
     // If head is not regular, returns None
     // If head is regular returns the atom with intervals replaced by fresh variables and regular terms translated:
     // Example: p(a, 1..10, X, I+1) -> p(a, N1$i, X, I$i + 1)
@@ -306,7 +299,7 @@ fn natural_head_atom(
             return None;
         };
     }
-    Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(
+    Some(Formula::AtomicFormula(fol::AtomicFormula::Atom(
         fol::Atom {
             predicate_symbol: a.predicate_symbol.clone(),
             terms,
@@ -318,9 +311,9 @@ fn natural_head_interval(
     a: &asp::Atom,
     int_vars: &IndexSet<std::string::String>,
     fresh_vars: &[String],
-) -> fol::Formula {
+) -> Formula {
     // assumes that natural_head_atom returned Some and therefore head is regular
-    let mut formulas = Vec::<fol::Formula>::new();
+    let mut formulas = Vec::<Formula>::new();
     let mut fresh_vars = fresh_vars.iter();
     for t in &a.terms {
         if is_term_regular_of_second_kind(t) {
@@ -336,7 +329,7 @@ fn natural_head_interval(
             let fresh_var = fresh_vars.next().unwrap();
             // create formula for t1 <= fresh_var and fresh_var <= t2
             let comp_formula =
-                fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
+                Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                     term: p2f(t1, int_vars)
                         .expect("p2f should not return None for a lhs-term of the second kind"),
                     guards: vec![
@@ -360,13 +353,10 @@ fn natural_head_interval(
         }
     }
     // conjoin all formulas
-    fol::Formula::conjoin(formulas)
+    Formula::conjoin(formulas)
 }
 
-fn natural_basic_head(
-    a: &asp::Atom,
-    int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+fn natural_basic_head(a: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
     let fresh_vars = fresh_variables_for_head_atom(a);
     let conclusion = natural_head_atom(a, int_vars, &fresh_vars)?;
     if fresh_vars.is_empty() {
@@ -383,27 +373,24 @@ fn natural_basic_head(
             .collect(),
     };
     let conditions = natural_head_interval(a, int_vars, &fresh_vars);
-    Some(fol::Formula::QuantifiedFormula {
+    Some(Formula::QuantifiedFormula {
         quantification,
-        formula: Box::new(fol::Formula::BinaryFormula {
-            connective: fol::BinaryConnective::Implication,
+        formula: Box::new(Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
             lhs: conditions.into(),
             rhs: conclusion.into(),
         }),
     })
 }
 
-fn natural_choice_head(
-    a: &asp::Atom,
-    int_vars: &IndexSet<std::string::String>,
-) -> Option<fol::Formula> {
+fn natural_choice_head(a: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
     let fresh_vars = fresh_variables_for_head_atom(a);
     let head_atom = natural_head_atom(a, int_vars, &fresh_vars)?;
     // conclusion is a disjunction of natural_head_atom and its negation
-    let conclusion = fol::Formula::BinaryFormula {
-        connective: fol::BinaryConnective::Disjunction,
+    let conclusion = Formula::BinaryFormula {
+        connective: BinaryConnective::Disjunction,
         lhs: head_atom.clone().into(),
-        rhs: fol::Formula::UnaryFormula {
+        rhs: Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
             formula: Box::new(head_atom.clone()),
         }
@@ -423,21 +410,21 @@ fn natural_choice_head(
             .collect(),
     };
     let conditions = natural_head_interval(a, int_vars, &fresh_vars);
-    Some(fol::Formula::QuantifiedFormula {
+    Some(Formula::QuantifiedFormula {
         quantification,
-        formula: Box::new(fol::Formula::BinaryFormula {
-            connective: fol::BinaryConnective::Implication,
+        formula: Box::new(Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
             lhs: conditions.into(),
             rhs: conclusion.into(),
         }),
     })
 }
 
-fn natural_constraint() -> fol::Formula {
-    fol::Formula::AtomicFormula(fol::AtomicFormula::Falsity)
+fn natural_constraint() -> Formula {
+    Formula::AtomicFormula(fol::AtomicFormula::Falsity)
 }
 
-fn natural_head(h: &asp::Head, int_vars: &IndexSet<std::string::String>) -> Option<fol::Formula> {
+fn natural_head(h: &asp::Head, int_vars: &IndexSet<std::string::String>) -> Option<Formula> {
     match h {
         asp::Head::Basic(a) => natural_basic_head(a, int_vars),
         asp::Head::Choice(a) => natural_choice_head(a, int_vars),
@@ -445,13 +432,13 @@ fn natural_head(h: &asp::Head, int_vars: &IndexSet<std::string::String>) -> Opti
     }
 }
 
-pub(crate) fn natural_rule(r: &asp::Rule) -> Option<fol::Formula> {
+pub(crate) fn natural_rule(r: &asp::Rule) -> Option<Formula> {
     let int_vars = int_variables(r);
     let head = natural_head(&r.head, &int_vars)?;
     let body = natural_body(&r.body, &int_vars)?;
     Some(
-        (fol::Formula::BinaryFormula {
-            connective: fol::BinaryConnective::Implication,
+        (Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
             lhs: body.into(),
             rhs: head.into(),
         })
@@ -459,8 +446,275 @@ pub(crate) fn natural_rule(r: &asp::Rule) -> Option<fol::Formula> {
     )
 }
 
-fn natural(program: asp::Program) -> Option<fol::Theory> {
-    let mut formulas = Vec::<fol::Formula>::new();
+// forall X ( B(X) -> forall Y (v(Y) -> p(Y)) )  ==>  forall X Y ( B(X) & v(Y) -> p(Y) )
+fn move_values_to_antecedent(formula: Formula) -> Formula {
+    let original = formula.clone();
+
+    match formula.unbox() {
+        // q -> forall Y (v(Y) -> p(Y))
+        UnboxedFormula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: body,
+            rhs:
+                Formula::QuantifiedFormula {
+                    quantification:
+                        Quantification {
+                            quantifier: Quantifier::Forall,
+                            variables,
+                        },
+                    formula,
+                },
+        } => match formula.unbox() {
+            UnboxedFormula::BinaryFormula {
+                connective: BinaryConnective::Implication,
+                lhs: values,
+                rhs: head,
+            } => Formula::QuantifiedFormula {
+                quantification: Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables,
+                },
+                formula: Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::conjoin([body, values]).into(),
+                    rhs: head.into(),
+                }
+                .into(),
+            },
+
+            _ => original,
+        },
+
+        // forall X ( B(X) -> forall Y (v(Y) -> p(Y)) )
+        UnboxedFormula::QuantifiedFormula {
+            quantification:
+                Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables: outer_variables,
+                },
+            formula:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: body,
+                    rhs,
+                },
+        } => match rhs.unbox() {
+            UnboxedFormula::QuantifiedFormula {
+                quantification:
+                    Quantification {
+                        quantifier: Quantifier::Forall,
+                        variables: mut inner_variables,
+                    },
+                formula:
+                    Formula::BinaryFormula {
+                        connective: BinaryConnective::Implication,
+                        lhs: values,
+                        rhs: head,
+                    },
+            } => {
+                let new_implication = Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::conjoin([*body, *values]).into(),
+                    rhs: head,
+                };
+
+                inner_variables.extend(outer_variables);
+
+                Formula::QuantifiedFormula {
+                    quantification: Quantification {
+                        quantifier: Quantifier::Forall,
+                        variables: inner_variables,
+                    },
+                    formula: new_implication.into(),
+                }
+            }
+
+            _ => original,
+        },
+
+        _ => original,
+    }
+}
+
+// B -> A v ~A  ==> B & ~~A -> A
+fn restructure_disjunctive_head(formula: Formula) -> Formula {
+    let original = formula.clone();
+
+    match formula.unbox() {
+        UnboxedFormula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: body,
+            rhs:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Disjunction,
+                    lhs: atom,
+                    rhs: negated_atom,
+                },
+        } => Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: Formula::BinaryFormula {
+                connective: BinaryConnective::Conjunction,
+                lhs: body.into(),
+                rhs: Formula::UnaryFormula {
+                    connective: fol::UnaryConnective::Negation,
+                    formula: negated_atom,
+                }
+                .into(),
+            }
+            .into(),
+            rhs: atom,
+        },
+
+        UnboxedFormula::QuantifiedFormula {
+            quantification:
+                Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables,
+                },
+            formula:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: body,
+                    rhs,
+                },
+        } => match rhs.unbox() {
+            UnboxedFormula::BinaryFormula {
+                connective: BinaryConnective::Disjunction,
+                lhs: atom,
+                rhs: negated_atom,
+            } => Formula::QuantifiedFormula {
+                quantification: Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables,
+                },
+                formula: Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: Formula::BinaryFormula {
+                        connective: BinaryConnective::Conjunction,
+                        lhs: body,
+                        rhs: Formula::UnaryFormula {
+                            connective: fol::UnaryConnective::Negation,
+                            formula: negated_atom.into(),
+                        }
+                        .into(),
+                    }
+                    .into(),
+                    rhs: atom.into(),
+                }
+                .into(),
+            },
+
+            _ => original,
+        },
+
+        _ => original,
+    }
+}
+
+fn mirror_tau_star(formula: Formula) -> Formula {
+    restructure_disjunctive_head(move_values_to_antecedent(formula))
+}
+
+fn make_implication_completable(
+    antecedent: Formula,
+    consequent: Formula,
+    var_names: &[String],
+) -> Option<Formula> {
+    match consequent {
+        Formula::AtomicFormula(fol::AtomicFormula::Falsity) => Some(Formula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs: antecedent.into(),
+            rhs: Formula::AtomicFormula(fol::AtomicFormula::Falsity).into(),
+        }),
+
+        // lhs -> p(t) becomes lhs & t = V -> p(V)
+        Formula::AtomicFormula(fol::AtomicFormula::Atom(atom)) => {
+            let mut new_vars = vec![];
+            let mut new_terms = vec![];
+            let mut val_t = vec![antecedent];
+
+            for (i, term) in atom.terms.into_iter().enumerate() {
+                let var = fol::GeneralTerm::Variable(var_names[i].clone());
+                new_terms.push(var.clone());
+                val_t.push(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                    fol::Comparison {
+                        term,
+                        guards: vec![fol::Guard {
+                            relation: fol::Relation::Equal,
+                            term: var,
+                        }],
+                    },
+                )));
+                new_vars.push(fol::Variable {
+                    name: var_names[i].clone(),
+                    sort: fol::Sort::General,
+                });
+            }
+
+            Some(Formula::BinaryFormula {
+                connective: BinaryConnective::Implication,
+                lhs: Formula::conjoin(val_t).into(),
+                rhs: Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
+                    predicate_symbol: atom.predicate_symbol,
+                    terms: new_terms,
+                }))
+                .into(),
+            })
+        }
+
+        _ => None,
+    }
+}
+
+// forall X ( B(X) -> p(t) )  ==>  forall X Y ( B(X) & t=Y -> p(Y) )
+pub(crate) fn make_formula_completable(formula: Formula, var_names: &[String]) -> Option<Formula> {
+    match mirror_tau_star(formula).unbox() {
+        // lhs -> rhs
+        UnboxedFormula::BinaryFormula {
+            connective: BinaryConnective::Implication,
+            lhs,
+            rhs,
+        } => make_implication_completable(lhs, rhs, var_names)
+            .map(|f| f.universal_closure_with_quantifier_joining()),
+
+        // forall X ( lhs -> rhs )
+        UnboxedFormula::QuantifiedFormula {
+            quantification:
+                Quantification {
+                    quantifier: Quantifier::Forall,
+                    ..
+                },
+            formula:
+                Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs,
+                    rhs,
+                },
+        } => make_implication_completable(*lhs, *rhs, var_names)
+            .map(|f| f.universal_closure_with_quantifier_joining()),
+
+        _ => None,
+    }
+}
+
+/// Assumes theory is obtained by applying natural translation to a set of regular rules
+pub(crate) fn make_completable(theory: Theory, var_names: &[String]) -> Option<Theory> {
+    let mut formulas = Vec::<Formula>::new();
+
+    for formula in theory.formulas {
+        match make_formula_completable(formula, var_names) {
+            Some(f) => formulas.push(f),
+            None => return None,
+        }
+    }
+
+    Some(Theory { formulas })
+}
+
+fn natural(program: asp::Program, completable: bool) -> Option<Theory> {
+    let max_arity = program.max_arity();
+
+    let mut formulas = Vec::<Formula>::new();
     for r in program.rules {
         if let Some(f) = natural_rule(&r) {
             formulas.push(f);
@@ -468,20 +722,29 @@ fn natural(program: asp::Program) -> Option<fol::Theory> {
             return None;
         }
     }
-    Some(fol::Theory { formulas })
+    let natural_theory = Theory { formulas };
+
+    if completable {
+        let fresh_var_names = natural_theory
+            .variables()
+            .choose_fresh_variables("V", max_arity);
+        make_completable(natural_theory, &fresh_var_names)
+    } else {
+        Some(natural_theory)
+    }
 }
 
 pub trait Natural {
     type Output;
 
-    fn natural(self) -> Option<Self::Output>;
+    fn natural(self, completable: bool) -> Option<Self::Output>;
 }
 
 impl Natural for asp::Program {
-    type Output = fol::Theory;
+    type Output = Theory;
 
-    fn natural(self) -> Option<Self::Output> {
-        natural(self)
+    fn natural(self, completable: bool) -> Option<Self::Output> {
+        natural(self, completable)
     }
 }
 
@@ -494,8 +757,13 @@ mod tests {
             natural_basic_head, natural_choice_head, natural_comparison, natural_head_atom,
             natural_head_interval, natural_rule, p2f, p2f_int_term,
         },
+        crate::translating::formula_representation::natural::{
+            move_values_to_antecedent, natural, restructure_disjunctive_head,
+        },
         indexmap::IndexSet,
     };
+
+    use crate::syntax_tree::fol::sigma_0::Formula;
 
     #[test]
     fn test_contains_symbol_or_infimum_or_supremum() {
@@ -807,7 +1075,7 @@ mod tests {
         for (source, target, int_vars) in [
             (
                 "3 = 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(3)),
                         guards: vec![fol::Guard {
@@ -820,7 +1088,7 @@ mod tests {
             ),
             (
                 "X = 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::Variable("X".to_string()),
                         guards: vec![fol::Guard {
@@ -833,7 +1101,7 @@ mod tests {
             ),
             (
                 "X < 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::Variable("X".to_string()),
                         guards: vec![fol::Guard {
@@ -846,7 +1114,7 @@ mod tests {
             ),
             (
                 "X = 3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Variable(
                             "X".to_string(),
@@ -861,7 +1129,7 @@ mod tests {
             ),
             (
                 "3 = 3..5",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(3)),
                         guards: vec![
@@ -880,7 +1148,7 @@ mod tests {
             ),
             (
                 "X = 3..5",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(3)),
                         guards: vec![
@@ -901,7 +1169,7 @@ mod tests {
             ),
             (
                 "X = Y+5..3",
-                Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Comparison(
+                Some(Formula::AtomicFormula(fol::AtomicFormula::Comparison(
                     fol::Comparison {
                         term: fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::BinaryOperation {
                             op: fol::BinaryOperator::Add,
@@ -950,7 +1218,7 @@ mod tests {
             ("{p(X)} :- X = 3.", "forall X (X = 3 -> p(X) or not p(X))"),
             (
                 "p(1..2, N0).",
-                "forall N0 (#true -> forall N0_0$i (1 <= N0_0$i <= 2-> p(N0_0$i, N0)))",
+                "forall N0 (#true -> forall N1$i (1 <= N1$i <= 2-> p(N1$i, N0)))",
             ),
             ("q(X+1) :- p(X).", "forall X$i (p(X$i) -> q(X$i + 1))"), // example (1) from paper [1]
             (
@@ -979,13 +1247,13 @@ mod tests {
             ), // Inspired by Tiling example
             (
                 "{ place(X,Y, T) } :- X = 1..10, Y = 1..10, T = 1..3.",
-                "forall X$i Y$i T$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
             ), // Inspired by Tiling
         ] {
             let rule = source.parse().unwrap();
             let natural = natural_rule(&rule).unwrap();
             let natural_string = natural.to_string();
-            let target_formula: fol::Formula = target.parse().unwrap();
+            let target_formula: Formula = target.parse().unwrap();
             let target = target_formula.to_string();
             assert_eq!(
                 natural, target_formula,
@@ -1058,7 +1326,7 @@ mod tests {
 
             match target {
                 Some(target_str) => {
-                    let target_formula: fol::Formula = target_str.parse().unwrap();
+                    let target_formula: Formula = target_str.parse().unwrap();
                     assert_eq!(
                         natural_head.as_ref().unwrap(),
                         &target_formula,
@@ -1106,7 +1374,7 @@ mod tests {
                 fresh_vars.iter().map(|v| v.to_string()).collect();
             let natural_head = natural_head_interval(&atom, &int_set, &fresh_vars);
 
-            let target_formula: fol::Formula = target.parse().unwrap();
+            let target_formula: Formula = target.parse().unwrap();
             assert_eq!(
                 natural_head, target_formula,
                 "assertion `natural_head_interval({atom}) == target` failed:\n natural_head_interval:\n{:?}\n target:\n{:?}",
@@ -1146,7 +1414,7 @@ mod tests {
                 "q(1..5, X, 1..X, Y, Z, X..Y)",
                 vec!["X", "Y"],
                 Some(
-                    "forall N0$i N2$i N5$i ( (1 <= N0$i <= 5 and 1 <= N2$i <= X$i and X$i <= N5$i <= Y$i) ->q(N0$i, X$i, N2$i, Y$i, Z, N5$i))",
+                    "forall N0$i N1$i N2$i ( (1 <= N0$i <= 5 and 1 <= N1$i <= X$i and X$i <= N2$i <= Y$i) ->q(N0$i, X$i, N1$i, Y$i, Z, N2$i))",
                 ),
             ),
             ("q(1..a)", vec![], None),
@@ -1155,7 +1423,7 @@ mod tests {
                 "q(1..5, X, 1..X, Y, Z, 2+7-X*3..Y)",
                 vec!["X", "Y"],
                 Some(
-                    "forall N0$i N2$i N5$i ( (1 <= N0$i <= 5 and 1 <= N2$i <= X$i and 2+7-X$i*3 <= N5$i <= Y$i) ->q(N0$i, X$i, N2$i, Y$i, Z, N5$i))",
+                    "forall N0$i N1$i N2$i ( (1 <= N0$i <= 5 and 1 <= N1$i <= X$i and 2+7-X$i*3 <= N2$i <= Y$i) ->q(N0$i, X$i, N1$i, Y$i, Z, N2$i))",
                 ),
             ),
         ] {
@@ -1165,12 +1433,12 @@ mod tests {
 
             match target {
                 Some(target_str) => {
-                    let target_formula: fol::Formula = target_str.parse().unwrap();
+                    let target_formula: Formula = target_str.parse().unwrap();
                     assert_eq!(
                         natural_head.as_ref().unwrap(),
                         &target_formula,
-                        "assertion `natural_basic_head({atom}) == target` failed:\n natural_head:\n{:?}\n target:\n{:?}",
-                        natural_head,
+                        "assertion `natural_basic_head({atom}) == target` failed:\n natural_head:\n{}\n target:\n{}",
+                        natural_head.clone().unwrap(),
                         &target_formula
                     );
                 }
@@ -1216,7 +1484,7 @@ mod tests {
                 "q(1..5, X, 1..X, Y, Z, X..Y)",
                 vec!["X", "Y"],
                 Some(
-                    "forall N0$i N2$i N5$i ( (1 <= N0$i <= 5 and 1 <= N2$i <= X$i and X$i <= N5$i <= Y$i) -> q(N0$i, X$i, N2$i, Y$i, Z, N5$i) or not q(N0$i, X$i, N2$i, Y$i, Z, N5$i))",
+                    "forall N0$i N1$i N2$i ( (1 <= N0$i <= 5 and 1 <= N1$i <= X$i and X$i <= N2$i <= Y$i) -> q(N0$i, X$i, N1$i, Y$i, Z, N2$i) or not q(N0$i, X$i, N1$i, Y$i, Z, N2$i))",
                 ),
             ),
             ("q(1..a)", vec![], None),
@@ -1225,7 +1493,7 @@ mod tests {
                 "q(1..5, X, 1..X, Y, Z, 2+7-X*3..Y)",
                 vec!["X", "Y"],
                 Some(
-                    "forall N0$i N2$i N5$i ( (1 <= N0$i <= 5 and 1 <= N2$i <= X$i and 2+7-X$i*3 <= N5$i <= Y$i) -> q(N0$i, X$i, N2$i, Y$i, Z, N5$i) or not q(N0$i, X$i, N2$i, Y$i, Z, N5$i))",
+                    "forall N0$i N1$i N2$i ( (1 <= N0$i <= 5 and 1 <= N1$i <= X$i and 2+7-X$i*3 <= N2$i <= Y$i) -> q(N0$i, X$i, N1$i, Y$i, Z, N2$i) or not q(N0$i, X$i, N1$i, Y$i, Z, N2$i))",
                 ),
             ),
         ] {
@@ -1235,13 +1503,13 @@ mod tests {
 
             match target {
                 Some(target_str) => {
-                    let target_formula: fol::Formula = target_str.parse().unwrap();
+                    let target_formula: Formula = target_str.parse().unwrap();
                     assert_eq!(
                         natural_head.as_ref().unwrap(),
                         &target_formula,
-                        "assertion `natural_choice_head({atom}) == target` failed:\n natural_head:\n{:?}\n target:\n{:?}",
-                        natural_head,
-                        &target_formula
+                        "assertion `natural_choice_head({atom}) == target` failed:\n natural_head:\n{}\n target:\n{}",
+                        natural_head.clone().unwrap(),
+                        target_formula
                     );
                 }
                 None => {
@@ -1282,8 +1550,8 @@ mod tests {
                     assert_eq!(
                         body.as_ref().unwrap(),
                         &target_formula,
-                        "assertion `natural_b_atom({atom}) == target` failed:\n body:\n{:?}\n target:\n{:?}",
-                        body,
+                        "assertion `natural_b_atom({atom}) == target` failed:\n body:\n{}\n target:\n{}",
+                        body.clone().unwrap(),
                         &target_formula
                     );
                 }
@@ -1295,6 +1563,158 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_move_values_to_antecedent() {
+        for (source, target) in [
+            ("#true -> a", "#true -> a"),
+            ("forall X (#true -> p(X))", "forall X (#true -> p(X))"),
+            ("b -> a", "b -> a"),
+            ("forall X (q(X) -> p(X))", "forall X (q(X) -> p(X))"),
+            ("forall X (X = 3 -> p(X))", "forall X (X = 3 -> p(X))"),
+            (
+                "forall X (X = 3 -> p(X) or not p(X))",
+                "forall X (X = 3 -> p(X) or not p(X))",
+            ),
+            (
+                "forall N0 (#true -> forall N1$i (1 <= N1$i <= 2-> p(N1$i, N0)))",
+                "forall N1$i N0 (#true and 1 <= N1$i <= 2 -> p(N1$i, N0))",
+            ),
+            (
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+            ), // example (1) from paper [1]
+            (
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+            ), // example from paper [1]
+            (
+                "forall X$i Y$i Z (p(X$i, Y$i, Z) -> forall N0$i N1$i (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i) -> q(N0$i, N1$i)))",
+                "forall N0$i N1$i X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) -> q(N0$i, N1$i))",
+            ), //( example from paper [1]
+            (
+                "forall X$i Y (p(X$i, Y) -> forall N0$i (1 <= N0$i <= X$i -> q(N0$i, Y) or not q(N0$i, Y)))",
+                "forall N0$i X$i Y ((p(X$i, Y) and 1 <= N0$i <= X$i) -> (q(N0$i, Y) or not q(N0$i, Y)))",
+            ), // example from paper [1]
+            (
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+            ), // example (6) from paper [2]
+            (
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+            ), // example (7) from paper [2]
+            (
+                "#true -> forall N0$ N1$ ( 1 <= N0$ <= 10 and (1 <= N1$ <= 10-2) -> (h(N0$, N1$) or not h(N0$, N1$)))",
+                "forall N0$ N1$ (#true and (1 <= N0$ <= 10 and (1 <= N1$ <= 10-2)) -> (h(N0$, N1$) or not h(N0$, N1$)))",
+            ), // Inspired by Tiling example
+            (
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+            ), // Inspired by Tiling
+        ] {
+            let source_formula = move_values_to_antecedent(source.parse().unwrap());
+            let source = source_formula.to_string();
+            let target_formula: Formula = target.parse().unwrap();
+            let target = target_formula.to_string();
+            assert_eq!(
+                source_formula, target_formula,
+                "assertion `move_values_to_antecedent` failed:\n source:\n{source:?}\n target:\n{target:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_restructure_disjunctive_head() {
+        for (source, target) in [
+            ("#true -> a", "#true -> a"),
+            ("forall X (#true -> p(X))", "forall X (#true -> p(X))"),
+            ("b -> a or not a", "b and not not a -> a"),
+            ("forall X (q(X) -> p(X))", "forall X (q(X) -> p(X))"),
+            ("forall X (X = 3 -> p(X))", "forall X (X = 3 -> p(X))"),
+            (
+                "forall X (X = 3 -> p(X) or not p(X))",
+                "forall X (X = 3 and not not p(X) -> p(X))",
+            ),
+            (
+                "forall N1$i N0 (#true and 1 <= N1$i <= 2 -> p(N1$i, N0))",
+                "forall N1$i N0 (#true and 1 <= N1$i <= 2 -> p(N1$i, N0))",
+            ),
+            (
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+                "forall X$i (p(X$i) -> q(X$i + 1))",
+            ), // example (1) from paper [1]
+            (
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+                "forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)",
+            ), // example from paper [1]
+            (
+                "forall N0$i N1$i X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) -> q(N0$i, N1$i))",
+                "forall N0$i N1$i X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) -> q(N0$i, N1$i))",
+            ), //( example from paper [1]
+            (
+                "forall N0$i X$i Y ( (p(X$i, Y) and 1 <= N0$i <= X$i) -> (q(N0$i, Y) or not q(N0$i, Y)))",
+                "forall N0$i X$i Y ( (p(X$i, Y) and 1 <= N0$i <= X$i and not not q(N0$i, Y)) -> q(N0$i, Y) )",
+            ), // example from paper [1]
+            (
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+                "forall X$i Y$i (1 <= X$i <= 2 and (1 <= Y$i <= 2) -> p(X$i, Y$i))",
+            ), // example (6) from paper [2]
+            (
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+                "forall X Y$i ( X = Y$i and (1 <= Y$i  <= 2) -> p(X, Y$i))",
+            ), // example (7) from paper [2]
+            (
+                "forall N0$ N1$ (#true and (1 <= N0$ <= 10 and (1 <= N1$ <= 10-2)) -> (h(N0$, N1$) or not h(N0$, N1$)))",
+                "forall N0$ N1$ (#true and (1 <= N0$ <= 10 and (1 <= N1$ <= 10-2)) and not not h(N0$, N1$) -> h(N0$, N1$))",
+            ), // Inspired by Tiling example
+            (
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3)) -> (place(X$i, Y$i, T$i) or not place(X$i, Y$i, T$i)))",
+                "forall T$i X$i Y$i ((1 <= X$i <= 10 and (1 <= Y$i <= 10) and (1 <= T$i  <= 3) and not not place(X$i, Y$i, T$i)) -> place(X$i, Y$i, T$i))",
+            ), // Inspired by Tiling
+        ] {
+            let source_formula = restructure_disjunctive_head(source.parse().unwrap());
+            let source = source_formula.to_string();
+            let target_formula: Formula = target.parse().unwrap();
+            let target = target_formula.to_string();
+            assert_eq!(
+                source_formula, target_formula,
+                "assertion `restructure_disjunctive_head` failed:\n source:\n{source:?}\n target:\n{target:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_make_completable() {
+        for (source, target) in [
+            (
+                "a. p(X). p(X) :- q(X).",
+                "#true -> a. forall V X (#true and X = V -> p(V)). forall V X (q(X) and X = V -> p(V))."
+            ),
+            (
+                "p(X) :- X = 3. {p(X)} :- X = 3. p(1..2, N0).", 
+                "forall V X (X = 3 and X = V -> p(V)). forall V X (X = 3 and not not p(X) and X = V -> p(V)). forall N0 N1$i V V1 (#true and 1 <= N1$i <= 2 and N1$i = V and N0 = V1 -> p(V, V1))."
+            ),
+            (
+                "q(X+1) :- p(X). :- p(X,Y,Z), X < Y, Y=1..Z.",
+                "forall V X$i (p(X$i) and X$i + 1 = V -> q(V)). forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)."
+            ),
+            (
+                "q(1..X, 1..Y) :- p(X,Y,Z). p(V,Y) :- V = Y, Y = 1..2.", 
+                "forall N0$i N1$i V1 V2 X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) and N0$i = V1 and N1$i = V2 -> q(V1, V2)).
+                forall V V1 V2 Y$i ( V = Y$i and (1 <= Y$i  <= 2) and V = V1 and Y$i = V2 -> p(V1, V2))."
+            ),
+        ] {
+            let source_theory = natural(source.parse().unwrap(), true).unwrap();
+            let source = source_theory.to_string();
+            let target_theory: fol::Theory = target.parse().unwrap();
+            let target = target_theory.to_string();
+            assert_eq!(
+                source_theory, target_theory,
+                "assertion `make_completable` failed:\n source:\n{source:?}\n target:\n{target:?}",
+            );
         }
     }
 }
