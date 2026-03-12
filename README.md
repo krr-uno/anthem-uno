@@ -5,7 +5,7 @@ This is an extension of the `anthem` 2.0 release that is currently being develop
 It operates by translating answer set programs written in the mini-gringo dialect of [clingo](https://potassco.org/clingo/) into many-sorted first-order theories.
 Using automated theorem provers, `anthem` can then verify properties of the original programs, such as strong and external equivalence.
 
-Check out the [Manual](https://potassco.org/anthem/) to learn how to install and use `anthem`.
+Check out the [Manual](https://krr-uno.github.io/anthem-uno/) to learn how to install and use `anthem`.
 
 If you want to use `anthem` as a library to build your own application, you can do so.
 Check out the [API documentation](https://docs.rs/anthem/) for the available functionalities.
