@@ -506,25 +506,60 @@ pub fn main() -> Result<()> {
             property,
             save_visualization,
         } => {
-            let theory = input.map_or_else(fol::Theory::from_stdin, fol::Theory::from_file)?;
-
-            let output = match property {
-                Visualization::Ast => {
-                    let formula = fol::Formula::conjoin(theory);
-                    let (_, tree) = grow_tree_from_formula(formula);
-                    format!("{}", Dot::with_config(&tree, &[Config::EdgeNoLabel]))
-                }
-                Visualization::DependencyGraph => {
-                    // TODO: allow user to specify set of intensional predicates
-                    let intensional_predicates = theory.predicates();
-                    match theory.predicate_dependency_graph(intensional_predicates) {
-                        Some(graph) => {
-                            format!("{}", Dot::with_config(&graph, &[Config::EdgeNoLabel]))
-                        }
-                        _ => "".to_string(),
+            let input = match input {
+                Some(path) => {
+                    match fol::Theory::from_file(&path) {
+                        Ok(theory) => Ok(Either::Left(theory)),
+                        Err(_) => match asp::mini_gringo::Program::from_file(&path) {
+                            Ok(program) => Ok(Either::Right(program)),
+                            Err(e) => Err(e),
+                        },
                     }
+                }?,
+                None => {
+                    todo!()
                 }
             };
+
+            let output = match property {
+                Visualization::Ast => match input {
+                    Either::Left(theory) => {
+                        let formula = fol::Formula::conjoin(theory);
+                        let (_, tree) = grow_tree_from_formula(formula);
+                        Ok(format!(
+                            "{}",
+                            Dot::with_config(&tree, &[Config::EdgeNoLabel])
+                        ))
+                    }
+                    Either::Right(_) => {
+                        Err(anyhow!("AST visualization is not supported for programs"))
+                    }
+                },
+
+                Visualization::DependencyGraph => {
+                    match input {
+                        Either::Left(theory) => {
+                            // TODO: allow user to specify set of intensional predicates
+                            let intensional_predicates = theory.predicates();
+                            match theory.predicate_dependency_graph(intensional_predicates) {
+                                Some(graph) => Ok(format!(
+                                    "{}",
+                                    Dot::with_config(&graph, &[Config::EdgeNoLabel])
+                                )),
+                                _ => Err(anyhow!("could not generate dependency graph of theory")),
+                            }
+                        }
+                        Either::Right(program) => {
+                            let intensional_predicates = program.predicates();
+                            let graph = program.predicate_dependency_graph(intensional_predicates);
+                            Ok(format!(
+                                "{}",
+                                Dot::with_config(&graph, &[Config::EdgeNoLabel])
+                            ))
+                        }
+                    }
+                }
+            }?;
 
             let mut f = File::create(save_visualization).unwrap();
             f.write_all(output.as_bytes())?;
