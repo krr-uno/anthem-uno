@@ -177,28 +177,17 @@ impl fol::Theory {
     }
 }
 
-pub trait Tightness {
-    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool;
-}
-
-impl Tightness for mini_gringo::Program {
-    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
-        // TODO: is this check necessary?
-        let program_predicates: IndexSet<GenericPredicate> =
-            self.predicates().into_iter().map(|p| p.into()).collect();
-        assert!(
-            program_predicates.is_subset(&intensional_predicates)
-                && program_predicates.is_superset(&intensional_predicates)
-        );
-
-        let mut dependency_graph = DiGraph::<(), ()>::new();
+impl mini_gringo::Program {
+    pub(crate) fn predicate_dependency_graph(
+        &self,
+        intensional_predicates: IndexSet<mini_gringo::Predicate>,
+    ) -> DiGraph<String, i32> {
+        let mut dependency_graph = DiGraph::<String, i32>::new();
         let mut mapping = HashMap::new();
 
-        for predicate in intensional_predicates
-            .into_iter()
-            .map(mini_gringo::Predicate::from)
-        {
-            let node = dependency_graph.add_node(());
+        for predicate in intensional_predicates.into_iter() {
+            let node =
+                dependency_graph.add_node(format!("{}/{}", predicate.symbol, predicate.arity));
             mapping.insert(predicate, node);
         }
 
@@ -208,13 +197,27 @@ impl Tightness for mini_gringo::Program {
                     dependency_graph.update_edge(
                         mapping[&head_predicate],
                         mapping[&positive_body_predicate],
-                        (),
+                        1,
                     );
                 }
             }
         }
 
-        !is_cyclic_directed(&dependency_graph)
+        dependency_graph
+    }
+}
+
+pub trait Tightness {
+    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool;
+}
+
+impl Tightness for mini_gringo::Program {
+    fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
+        let predicates: IndexSet<mini_gringo::Predicate> = intensional_predicates
+            .into_iter()
+            .map(|p| p.into())
+            .collect();
+        !is_cyclic_directed(&self.predicate_dependency_graph(predicates))
     }
 }
 
