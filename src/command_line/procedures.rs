@@ -36,6 +36,7 @@ use {
         fs::{self, File},
         io::{self, Write, stdin},
         path::{Path, PathBuf},
+        process,
         time::Instant,
     },
 };
@@ -561,8 +562,27 @@ pub fn main() -> Result<()> {
                 }
             }?;
 
-            let mut f = File::create(save_visualization).unwrap();
+            let mut graph_out = save_visualization.clone();
+            graph_out.set_extension("dot");
+            let graphvis_file = graph_out.clone();
+
+            let mut pdf_file = graph_out.clone();
+            pdf_file.set_extension("pdf");
+
+            let mut f = File::create(graph_out).unwrap();
             f.write_all(output.as_bytes())?;
+
+            let dot_cmd = format!(
+                "dot -Tpdf {} > {}",
+                graphvis_file.display(),
+                pdf_file.display()
+            );
+
+            process::Command::new("sh")
+                .arg("-c")
+                .arg(dot_cmd)
+                .output()
+                .expect("could not run dot command");
 
             Ok(())
         }
