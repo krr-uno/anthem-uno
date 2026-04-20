@@ -702,10 +702,8 @@ pub(crate) fn make_completable(theory: Theory, var_names: &[String]) -> Option<T
     let mut formulas = Vec::<Formula>::new();
 
     for formula in theory.formulas {
-        match make_formula_completable(formula, var_names) {
-            Some(f) => formulas.push(f),
-            None => return None,
-        }
+        let f = make_formula_completable(formula, var_names)?;
+        formulas.push(f);
     }
 
     Some(Theory { formulas })
@@ -716,11 +714,8 @@ fn natural(program: asp::Program, completable: bool) -> Option<Theory> {
 
     let mut formulas = Vec::<Formula>::new();
     for r in program.rules {
-        if let Some(f) = natural_rule(&r) {
-            formulas.push(f);
-        } else {
-            return None;
-        }
+        let f = natural_rule(&r)?;
+        formulas.push(f);
     }
     let natural_theory = Theory { formulas };
 
@@ -1694,7 +1689,7 @@ mod tests {
                 "#true -> a. forall V X (#true and X = V -> p(V)). forall V X (q(X) and X = V -> p(V))."
             ),
             (
-                "p(X) :- X = 3. {p(X)} :- X = 3. p(1..2, N0).", 
+                "p(X) :- X = 3. {p(X)} :- X = 3. p(1..2, N0).",
                 "forall V X (X = 3 and X = V -> p(V)). forall V X (X = 3 and not not p(X) and X = V -> p(V)). forall N0 N1$i V V1 (#true and 1 <= N1$i <= 2 and N1$i = V and N0 = V1 -> p(V, V1))."
             ),
             (
@@ -1702,7 +1697,7 @@ mod tests {
                 "forall V X$i (p(X$i) and X$i + 1 = V -> q(V)). forall X Y$i Z$i (p(X, Y$i, Z$i) and X < Y$i and (1 <= Y$i <= Z$i) -> #false)."
             ),
             (
-                "q(1..X, 1..Y) :- p(X,Y,Z). p(V,Y) :- V = Y, Y = 1..2.", 
+                "q(1..X, 1..Y) :- p(X,Y,Z). p(V,Y) :- V = Y, Y = 1..2.",
                 "forall N0$i N1$i V1 V2 X$i Y$i Z (p(X$i, Y$i, Z) and (1 <= N0$i <= X$i and (1 <= N1$i <= Y$i)) and N0$i = V1 and N1$i = V2 -> q(V1, V2)).
                 forall V V1 V2 Y$i ( V = Y$i and (1 <= Y$i  <= 2) and V = V1 and Y$i = V2 -> p(V1, V2))."
             ),

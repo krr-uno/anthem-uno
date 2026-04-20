@@ -16,8 +16,40 @@ For example, visit the [cover](res/examples/external_equivalence/cover) director
 
 ## Vampire
 The 2.0 release of `anthem` and the associated [paper](https://arxiv.org/abs/2507.11704) used `vampire` v4.9casc2024 linked with Z3, found [here](https://github.com/vprover/vampire/releases/tag/v4.9casc2024).
-To replicate this setup, build `vampire` from source using `git clone --recursive` to include the Z3 files. 
-Build Z3 before `vampire`. 
+To replicate this setup, build `vampire` from source using `git clone --recursive` to include the Z3 files.
+Build Z3 before `vampire`.
+
+## Replicating the Anthem 2.0 Experimental Setup
+
+Clone the appropriate version of `vampire`:
+```sh
+$ git clone --recursive --branch v4.9casc2024 --depth=1 https://github.com/vprover/vampire.git
+```
+
+Build `z3`:
+```sh
+$ cd vampire/z3
+$ mkdir build && cd build
+$ cmake .. -DZ3_SINGLE_THREADED=1 -DCMAKE_BUILD_TYPE=Release
+$ make
+```
+
+Now `cd` back to the `vampire` source directory and build `vampire`:
+```sh
+$ mkdir build && cd build
+```
+
+Change the installation directory (for example, `/usr/bin`) as needed when running cmake, e.g.
+```sh
+$ cmake .. -DCMAKE_INSTALL_PREFIX=/usr/bin
+$ make
+```
+
+Copy the executable to your installation directory:
+```sh
+$ sudo cp bin/vampire_z3* <Your Installation Directory>/vampire
+```
+
 
 ## License
 
