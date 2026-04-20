@@ -261,10 +261,8 @@ impl TryFrom<mini_gringo_cl::Atom> for Atom {
     fn try_from(value: mini_gringo_cl::Atom) -> Result<Self, Self::Error> {
         let mut mg_terms = Vec::new();
         for term in value.terms {
-            match Term::try_from(term) {
-                Ok(t) => mg_terms.push(t),
-                Err(e) => return Err(e),
-            }
+            let t = Term::try_from(term)?;
+            mg_terms.push(t);
         }
 
         Ok(Atom {
@@ -736,10 +734,8 @@ impl TryFrom<mini_gringo_cl::Program> for Program {
     fn try_from(value: mini_gringo_cl::Program) -> Result<Self, Self::Error> {
         let mut rules = Vec::new();
         for rule in value.rules {
-            match Rule::try_from(rule) {
-                Ok(r) => rules.push(r),
-                Err(e) => return Err(e),
-            }
+            let r = Rule::try_from(rule)?;
+            rules.push(r);
         }
         Ok(Program { rules })
     }
