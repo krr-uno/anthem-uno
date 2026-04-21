@@ -155,7 +155,7 @@ pub enum Command {
 
         /// The destination directory for the visualization file
         #[arg(long)]
-        save_visualization: PathBuf,
+        save_as: PathBuf,
 
         /// The file to visualize
         input: Option<PathBuf>,

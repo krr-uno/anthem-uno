@@ -505,7 +505,7 @@ pub fn main() -> Result<()> {
         Command::Visualize {
             input,
             property,
-            save_visualization,
+            save_as,
         } => {
             let input = match input {
                 Some(path) => {
@@ -562,7 +562,7 @@ pub fn main() -> Result<()> {
                 }
             }?;
 
-            let mut graph_out = save_visualization.clone();
+            let mut graph_out = save_as.clone();
             graph_out.set_extension("dot");
             let graphvis_file = graph_out.clone();
 
