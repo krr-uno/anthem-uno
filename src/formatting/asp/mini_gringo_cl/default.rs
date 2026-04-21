@@ -5,9 +5,8 @@ use {
             Node,
             asp::mini_gringo_cl::{
                 Atom, AtomicFormula, BinaryOperator, Body, BodyLiteral, Comparison,
-                ConditionalBody, ConditionalHead, ConditionalLiteral, Head, Literal,
-                PrecomputedTerm, Predicate, Program, Relation, Rule, Sign, Term, UnaryOperator,
-                Variable,
+                ConditionalBody, ConditionalHead, Head, Literal, PrecomputedTerm, Predicate,
+                Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
             },
         },
     },
@@ -230,11 +229,21 @@ impl Display for Format<'_, ConditionalBody> {
     }
 }
 
-impl Display for Format<'_, ConditionalLiteral> {
+impl Display for Format<'_, BodyLiteral> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", Format(&self.0.head))?;
-        if !self.0.conditions.formulas.is_empty() {
-            write!(f, " : {}", Format(&self.0.conditions))?;
+        match self.0 {
+            BodyLiteral::GfiveConditionalLiteral(cl) => {
+                write!(f, "{}", Format(&cl.head))?;
+                if !cl.conditions.formulas.is_empty() {
+                    write!(f, " : {}", Format(&cl.conditions))?;
+                }
+            }
+            BodyLiteral::GsixConditionalLiteral(cl) => {
+                write!(f, "{}", Format(&cl.head))?;
+                if !cl.conditions.formulas.is_empty() {
+                    write!(f, " :: {}", Format(&cl.conditions))?;
+                }
+            }
         }
         Ok(())
     }
@@ -252,9 +261,7 @@ impl Display for Format<'_, Head> {
 
 impl Display for Format<'_, Body> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut iter = self.0.formulas.iter().map(|literal| match literal {
-            BodyLiteral::ConditionalLiteral(cl) => format!("{}", Format(cl)),
-        });
+        let mut iter = self.0.formulas.iter().map(Format);
         if let Some(formula) = iter.next() {
             write!(f, "{formula}")?;
             for formula in iter {
@@ -534,7 +541,7 @@ mod tests {
         assert_eq!(
             Format(&Body {
                 formulas: vec![
-                    BodyLiteral::ConditionalLiteral(ConditionalLiteral {
+                    BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
                         head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
                             sign: Sign::NoSign,
                             atom: Atom {
@@ -544,7 +551,7 @@ mod tests {
                         })),
                         conditions: ConditionalBody { formulas: vec![] },
                     }),
-                    BodyLiteral::ConditionalLiteral(ConditionalLiteral {
+                    BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
                         head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
                             Comparison {
                                 relation: Relation::Less,
@@ -584,18 +591,20 @@ mod tests {
                             terms: vec![]
                         }),
                         body: Body {
-                            formulas: vec![BodyLiteral::ConditionalLiteral(ConditionalLiteral {
-                                head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(
-                                    Literal {
-                                        sign: Sign::Negation,
-                                        atom: Atom {
-                                            predicate_symbol: "a".into(),
-                                            terms: vec![]
+                            formulas: vec![BodyLiteral::GfiveConditionalLiteral(
+                                ConditionalLiteral {
+                                    head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(
+                                        Literal {
+                                            sign: Sign::Negation,
+                                            atom: Atom {
+                                                predicate_symbol: "a".into(),
+                                                terms: vec![]
+                                            }
                                         }
-                                    }
-                                )),
-                                conditions: ConditionalBody { formulas: vec![] },
-                            })]
+                                    )),
+                                    conditions: ConditionalBody { formulas: vec![] },
+                                }
+                            )]
                         }
                     }
                 ]

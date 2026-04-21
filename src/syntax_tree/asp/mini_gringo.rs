@@ -588,7 +588,10 @@ impl TryFrom<mini_gringo_cl::Body> for Body {
         let mut formulas = Vec::new();
         for formula in value.formulas {
             match formula {
-                mini_gringo_cl::BodyLiteral::ConditionalLiteral(conditional_literal) => {
+                mini_gringo_cl::BodyLiteral::GsixConditionalLiteral(_) => {
+                    return Err("Gringo 6 conditional literals may not have empty bodies");
+                }
+                mini_gringo_cl::BodyLiteral::GfiveConditionalLiteral(conditional_literal) => {
                     let is_basic = conditional_literal.basic();
                     match conditional_literal.head {
                         mini_gringo_cl::ConditionalHead::AtomicFormula(atomic_formula) => {

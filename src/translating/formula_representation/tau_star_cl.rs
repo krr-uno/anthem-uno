@@ -723,7 +723,10 @@ fn tau_body(b: asp::Body, z: IndexSet<asp::Variable>) -> Formula {
     let mut formulas = Vec::new();
     for f in b.formulas.iter() {
         match f {
-            asp::BodyLiteral::ConditionalLiteral(cl) => formulas.push(tau_b_cl(cl.clone(), &z)),
+            asp::BodyLiteral::GfiveConditionalLiteral(cl) => {
+                formulas.push(tau_b_cl(cl.clone(), &z))
+            }
+            asp::BodyLiteral::GsixConditionalLiteral(_) => todo!(),
         }
     }
     Formula::conjoin(formulas)
@@ -841,7 +844,10 @@ impl TauStar for asp::Program {
 #[cfg(test)]
 mod tests {
     use super::{tau_b, tau_b_cl, tau_star, tau_star_rule, val, valtz};
-    use crate::syntax_tree::{asp::mini_gringo_cl as asp, fol::sigma_0 as fol};
+    use crate::syntax_tree::{
+        asp::mini_gringo_cl::{self as asp, BodyLiteral},
+        fol::sigma_0 as fol,
+    };
     use indexmap::IndexSet;
 
     #[test]
@@ -1009,9 +1015,15 @@ mod tests {
                 "forall Y (exists Z (exists I$i J$i K$i (I$i = X and J$i = Y and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and not q(Z)) -> exists Z Z1 (Z = X and Z1 = Y and p(Z, Z1)))",
             ),
         ] {
-            let src = tau_b_cl(src.0.parse().unwrap(), &src.1);
-            let target = target.parse().unwrap();
-            assert_eq!(src, target, "{src} !=\n {target}")
+            let cl: BodyLiteral = src.0.parse().unwrap();
+            match cl {
+                BodyLiteral::GfiveConditionalLiteral(conditional_literal) => {
+                    let src = tau_b_cl(conditional_literal, &src.1);
+                    let target = target.parse().unwrap();
+                    assert_eq!(src, target, "{src} !=\n {target}")
+                }
+                BodyLiteral::GsixConditionalLiteral(_) => todo!(),
+            }
         }
     }
 

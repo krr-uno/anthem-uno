@@ -68,8 +68,11 @@ conditional_head_eoi = _{ conditional_head ~ EOI }
 conditional_body = { atomic_formula ~ ("," ~ atomic_formula)* }
 conditional_body_eoi = _{ conditional_body ~ EOI }
 
-conditional_literal = { conditional_head ~ (":" ~ conditional_body)? }
-conditional_literal_eoi = _{ conditional_literal ~ EOI }
+gfive_conditional_literal = { conditional_head ~ (":" ~ conditional_body)? }
+gfive_conditional_literal_eoi = _{ gfive_conditional_literal ~ EOI }
+
+gsix_conditional_literal = { conditional_head ~ "::" ~ conditional_body }
+gsix_conditional_literal_eoi = _{ gsix_conditional_literal ~ EOI }
 
 head = { basic_head | choice_head | falsity }
 head_eoi = _{ head ~ EOI }
@@ -77,7 +80,8 @@ head_eoi = _{ head ~ EOI }
     choice_head = { "{" ~ atom ~ "}" }
     falsity = { "#false"? }
 
-body_literal = _{ conditional_literal }
+body_literal = { gsix_conditional_literal | gfive_conditional_literal }
+body_literal_eoi = _{ body_literal ~ EOI }
 
 body = { (body_literal ~ (("," | ";") ~ body_literal)*)? }
 body_eoi = _{ body ~ EOI }
