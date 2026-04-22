@@ -15,12 +15,14 @@ unary_operator = _{ negative }
 unary_operator_eoi = _{ unary_operator ~ EOI }
     negative = { !integer ~ "-" }
 
-binary_operator = _{ add | subtract | multiply | divide | modulo | interval }
+binary_operator = _{ add | subtract | multiply | divide_integer | divide | modulo_integer | modulo | interval }
 binary_operator_eoi = _{ binary_operator ~ EOI }
     add = { "+" }
     subtract = { "-" }
     multiply = { "*" }
+    divide_integer = { "//" }
     divide = { "/" }
+    modulo_integer = { "@" }
     modulo = { "\\" }
     interval = { ".." }
 

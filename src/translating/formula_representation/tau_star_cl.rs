@@ -419,7 +419,7 @@ fn division_helper_f3(i: Variable, j: Variable, k: Variable, z: Variable) -> For
 // Follows Locally Tight Programs (2023), Conditional literals & Arithmetic (2025)
 // Division: exists I J K (val_t1(I) & val_t2(J) & F1(IJK) & F2(IJKZ))
 // Modulo:   exists I J K (val_t1(I) & val_t2(J) & F1(IJK) & F3(IJKZ))
-fn construct_partial_function_formula(
+fn construct_gfive_partial_function_formula(
     valti: Formula,
     valtj: Formula,
     binop: asp::BinaryOperator,
@@ -447,6 +447,133 @@ fn construct_partial_function_formula(
             variables: vec![i, j, k],
         },
         formula: Formula::conjoin([valti, valtj, f1, f]).into(),
+    }
+}
+
+// I = J * Q + R & val_t1(I) & val_t2(J) & J != 0 & R >= 0 & R < J
+fn division_helper_f4(
+    valti: Formula,
+    valtj: Formula,
+    i: Variable,
+    j: Variable,
+    q: Variable,
+    r: Variable,
+) -> Formula {
+    // I = J * Q + R
+    let comp1 = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+        term: i.into(),
+        guards: vec![Guard {
+            relation: Relation::Equal,
+            term: GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+                op: BinaryOperator::Add,
+                lhs: IntegerTerm::BinaryOperation {
+                    op: BinaryOperator::Multiply,
+                    lhs: IntegerTerm::Variable(j.name.clone()).into(),
+                    rhs: IntegerTerm::Variable(q.name).into(),
+                }
+                .into(),
+                rhs: IntegerTerm::Variable(r.name.clone()).into(),
+            }),
+        }],
+    }));
+
+    // J != 0 & R >= 0 & R < J
+    let comp2 = Formula::conjoin(vec![
+        Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+            term: j.clone().into(),
+            guards: vec![Guard {
+                relation: Relation::NotEqual,
+                term: GeneralTerm::IntegerTerm(IntegerTerm::Numeral(0)),
+            }],
+        })),
+        Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+            term: r.clone().into(),
+            guards: vec![Guard {
+                relation: Relation::GreaterEqual,
+                term: GeneralTerm::IntegerTerm(IntegerTerm::Numeral(0)),
+            }],
+        })),
+        Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+            term: r.into(),
+            guards: vec![Guard {
+                relation: Relation::Less,
+                term: j.into(),
+            }],
+        })),
+    ]);
+
+    Formula::conjoin(vec![comp1, valti, valtj, comp2])
+}
+
+// Gringo 6 compliant integer division and modulo.
+// Follows Verifying Tight Logic Programs with Anthem and Vampire
+// Division: exists I J Q R (F4(IJQR) & Z = Q)
+// Modulo:   exists I J Q R (F4(IJQR) & Z = R)
+fn construct_gsix_partial_function_formula(
+    valti: Formula,
+    valtj: Formula,
+    binop: asp::BinaryOperator,
+    i: Variable,
+    j: Variable,
+    z: Variable,
+) -> Formula {
+    assert_eq!(i.sort, Sort::Integer);
+    assert_eq!(j.sort, Sort::Integer);
+
+    let mut taken_vars = IndexSet::new();
+    taken_vars.insert(z.clone());
+    let qvar = Variable {
+        name: taken_vars.choose_fresh_variable("Q"),
+        sort: Sort::Integer,
+    };
+    let rvar = Variable {
+        name: taken_vars.choose_fresh_variable("R"),
+        sort: Sort::Integer,
+    };
+
+    let quantification = Quantification {
+        quantifier: Quantifier::Exists,
+        variables: vec![i.clone(), j.clone(), qvar.clone(), rvar.clone()],
+    };
+
+    match binop {
+        // exists I J Q R (F4(IJQR) & Z = Q)
+        asp::BinaryOperator::DivideInteger => Formula::QuantifiedFormula {
+            quantification,
+            formula: Formula::BinaryFormula {
+                connective: BinaryConnective::Conjunction,
+                lhs: division_helper_f4(valti, valtj, i, j, qvar.clone(), rvar).into(),
+                rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+                    term: z.into(),
+                    guards: vec![Guard {
+                        relation: Relation::Equal,
+                        term: qvar.into(),
+                    }],
+                }))
+                .into(),
+            }
+            .into(),
+        },
+
+        // exists I J Q R (F4(IJQR) & Z = R)
+        asp::BinaryOperator::ModuloInteger => Formula::QuantifiedFormula {
+            quantification,
+            formula: Formula::BinaryFormula {
+                connective: BinaryConnective::Conjunction,
+                lhs: division_helper_f4(valti, valtj, i, j, qvar, rvar.clone()).into(),
+                rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+                    term: z.into(),
+                    guards: vec![Guard {
+                        relation: Relation::Equal,
+                        term: rvar.into(),
+                    }],
+                }))
+                .into(),
+            }
+            .into(),
+        },
+
+        _ => unreachable!("division and modulo are the only supported partial functions"),
     }
 }
 
@@ -503,13 +630,23 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
                     z,
                 ),
                 asp::BinaryOperator::Divide | asp::BinaryOperator::Modulo => {
-                    construct_partial_function_formula(
+                    construct_gfive_partial_function_formula(
                         valti,
                         valtj,
                         op,
                         fresh_int_vars["I"].clone(),
                         fresh_int_vars["J"].clone(),
                         fresh_int_vars["K"].clone(),
+                        z,
+                    )
+                }
+                asp::BinaryOperator::DivideInteger | asp::BinaryOperator::ModuloInteger => {
+                    construct_gsix_partial_function_formula(
+                        valti,
+                        valtj,
+                        op,
+                        fresh_int_vars["I"].clone(),
+                        fresh_int_vars["J"].clone(),
                         z,
                     )
                 }
@@ -1100,6 +1237,14 @@ mod tests {
             (
                 "p(1/0)",
                 "exists Z (exists I$i J$i K$i (I$i = 1 and J$i = 0 and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and p(Z))",
+            ),
+            (
+                "X // Y > 5",
+                "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = Q$i) and Z1 = 5 and Z > Z1)",
+            ),
+            (
+                "X @ Y > 5",
+                "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = R$i) and Z1 = 5 and Z > Z1)",
             ),
         ] {
             let left = tau_b(src.parse().unwrap());

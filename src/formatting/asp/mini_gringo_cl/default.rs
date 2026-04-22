@@ -48,7 +48,9 @@ impl Display for Format<'_, BinaryOperator> {
             BinaryOperator::Subtract => write!(f, "-"),
             BinaryOperator::Multiply => write!(f, "*"),
             BinaryOperator::Divide => write!(f, "/"),
+            BinaryOperator::DivideInteger => write!(f, "//"),
             BinaryOperator::Modulo => write!(f, "\\"),
+            BinaryOperator::ModuloInteger => write!(f, "@"),
             BinaryOperator::Interval => write!(f, ".."),
         }
     }
@@ -60,7 +62,12 @@ impl Precedence for Format<'_, Term> {
             Term::PrecomputedTerm(PrecomputedTerm::Numeral(1..)) => 1,
             Term::UnaryOperation { .. } | Term::PrecomputedTerm(_) | Term::Variable(_) => 0,
             Term::BinaryOperation {
-                op: BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo,
+                op:
+                    BinaryOperator::Multiply
+                    | BinaryOperator::Divide
+                    | BinaryOperator::DivideInteger
+                    | BinaryOperator::Modulo
+                    | BinaryOperator::ModuloInteger,
                 ..
             } => 2,
             Term::BinaryOperation {
