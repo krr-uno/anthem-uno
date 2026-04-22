@@ -511,7 +511,7 @@ pub fn main() -> Result<()> {
                 Some(path) => {
                     match fol::Theory::from_file(&path) {
                         Ok(theory) => Ok(Either::Left(theory)),
-                        Err(_) => match asp::mini_gringo::Program::from_file(&path) {
+                        Err(_) => match get_program_of_unknown_dialect(Some(path)) {
                             Ok(program) => Ok(Either::Right(program)),
                             Err(e) => Err(e),
                         },
@@ -550,9 +550,17 @@ pub fn main() -> Result<()> {
                                 _ => Err(anyhow!("could not generate dependency graph of theory")),
                             }
                         }
-                        Either::Right(program) => {
-                            let intensional_predicates = program.predicates();
-                            let graph = program.predicate_dependency_graph(intensional_predicates);
+                        Either::Right(prog) => {
+                            let graph = match prog {
+                                Program::MiniGringo(program) => {
+                                    let intensional_predicates = program.predicates();
+                                    program.predicate_dependency_graph(intensional_predicates)
+                                }
+                                Program::MiniGringoCl(program) => {
+                                    let intensional_predicates = program.predicates();
+                                    program.predicate_dependency_graph(intensional_predicates)
+                                }
+                            };
                             Ok(format!(
                                 "{}",
                                 Dot::with_config(&graph, &[Config::EdgeNoLabel])
