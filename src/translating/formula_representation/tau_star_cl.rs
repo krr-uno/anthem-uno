@@ -666,7 +666,7 @@ fn tau_b(f: asp::AtomicFormula) -> Formula {
 }
 
 // Translate a conditional literal l of the first kind with global variables z
-fn tau_b_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula {
+fn tau_b_gfive_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula {
     let head = l.head.clone();
     let conditions = l.conditions.formulas.clone();
 
@@ -718,15 +718,164 @@ fn tau_b_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula 
     }
 }
 
+fn gsix_cl_consequent(head: asp::ConditionalHead) -> Formula {
+    match head.clone() {
+        asp::ConditionalHead::AtomicFormula(a) => match a {
+            asp::AtomicFormula::Literal(literal) => {
+                let arity = literal.atom.terms.len();
+                let taken_vars: IndexSet<Variable> =
+                    IndexSet::from_iter(head.variables().into_iter().map(|v| Variable {
+                        name: v.to_string(),
+                        sort: Sort::General,
+                    }));
+                let consequent_vars = taken_vars.choose_fresh_variables("V", arity);
+                let vars: Vec<Variable> = consequent_vars
+                    .clone()
+                    .into_iter()
+                    .map(|name| Variable {
+                        name,
+                        sort: Sort::General,
+                    })
+                    .collect();
+                let new_atom = Formula::AtomicFormula(AtomicFormula::Atom(Atom {
+                    predicate_symbol: literal.atom.predicate_symbol,
+                    terms: consequent_vars
+                        .into_iter()
+                        .map(GeneralTerm::Variable)
+                        .collect(),
+                }));
+
+                let inner = Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: valtz(literal.atom.terms, vars.clone()).into(),
+                    rhs: match literal.sign {
+                        asp::Sign::NoSign => new_atom,
+                        asp::Sign::Negation => Formula::UnaryFormula {
+                            connective: UnaryConnective::Negation,
+                            formula: new_atom.into(),
+                        },
+                        asp::Sign::DoubleNegation => Formula::UnaryFormula {
+                            connective: UnaryConnective::Negation,
+                            formula: Formula::UnaryFormula {
+                                connective: UnaryConnective::Negation,
+                                formula: new_atom.into(),
+                            }
+                            .into(),
+                        },
+                    }
+                    .into(),
+                };
+
+                if vars.is_empty() {
+                    inner
+                } else {
+                    Formula::QuantifiedFormula {
+                        quantification: Quantification {
+                            quantifier: Quantifier::Forall,
+                            variables: vars,
+                        },
+                        formula: inner.into(),
+                    }
+                }
+            }
+
+            asp::AtomicFormula::Comparison(comparison) => {
+                let taken_vars: IndexSet<Variable> =
+                    IndexSet::from_iter(head.variables().into_iter().map(|v| Variable {
+                        name: v.to_string(),
+                        sort: Sort::General,
+                    }));
+                let consequent_vars = taken_vars.choose_fresh_variables("V", 2);
+                let vars: Vec<Variable> = consequent_vars
+                    .clone()
+                    .into_iter()
+                    .map(|name| Variable {
+                        name,
+                        sort: Sort::General,
+                    })
+                    .collect();
+
+                let new_comp = Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+                    term: GeneralTerm::Variable(consequent_vars[0].clone()),
+                    guards: vec![Guard {
+                        relation: Relation::from(comparison.relation),
+                        term: GeneralTerm::Variable(consequent_vars[1].clone()),
+                    }],
+                }));
+
+                let inner = Formula::BinaryFormula {
+                    connective: BinaryConnective::Implication,
+                    lhs: valtz(vec![comparison.lhs, comparison.rhs], vars.clone()).into(),
+                    rhs: new_comp.into(),
+                };
+
+                Formula::QuantifiedFormula {
+                    quantification: Quantification {
+                        quantifier: Quantifier::Forall,
+                        variables: vars,
+                    },
+                    formula: inner.into(),
+                }
+            }
+        },
+
+        asp::ConditionalHead::Falsity => Formula::AtomicFormula(AtomicFormula::Falsity),
+    }
+}
+
+// Translate a conditional literal l of the second kind with global variables z
+fn tau_b_gsix_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula {
+    let head = l.head.clone();
+    let conditions = l.conditions.formulas.clone();
+
+    let mut local_vars = l.variables();
+    local_vars.retain(|v| !z.contains(v));
+
+    let consequent = gsix_cl_consequent(head);
+
+    let mut formulas = vec![];
+    for c in conditions.iter() {
+        formulas.push(tau_b(c.clone()));
+    }
+    let antecedent = Formula::conjoin(formulas);
+
+    let inner_formula = Formula::BinaryFormula {
+        connective: BinaryConnective::Implication,
+        lhs: antecedent.into(),
+        rhs: consequent.into(),
+    };
+
+    if local_vars.is_empty() {
+        inner_formula
+    } else {
+        let mut variables = vec![];
+        for v in local_vars.iter() {
+            variables.push(Variable {
+                name: v.0.clone(),
+                sort: Sort::General,
+            });
+        }
+        Formula::QuantifiedFormula {
+            quantification: Quantification {
+                quantifier: Quantifier::Forall,
+                variables,
+            },
+            formula: inner_formula.into(),
+        }
+    }
+}
+
 // Translate a rule body
 fn tau_body(b: asp::Body, z: IndexSet<asp::Variable>) -> Formula {
     let mut formulas = Vec::new();
     for f in b.formulas.iter() {
         match f {
             asp::BodyLiteral::GfiveConditionalLiteral(cl) => {
-                formulas.push(tau_b_cl(cl.clone(), &z))
+                formulas.push(tau_b_gfive_cl(cl.clone(), &z))
             }
-            asp::BodyLiteral::GsixConditionalLiteral(_) => todo!(),
+            asp::BodyLiteral::GsixConditionalLiteral(cl) => {
+                formulas.push(tau_b_gsix_cl(cl.clone(), &z))
+            }
         }
     }
     Formula::conjoin(formulas)
@@ -843,10 +992,13 @@ impl TauStar for asp::Program {
 
 #[cfg(test)]
 mod tests {
-    use super::{tau_b, tau_b_cl, tau_star, tau_star_rule, val, valtz};
-    use crate::syntax_tree::{
-        asp::mini_gringo_cl::{self as asp, BodyLiteral},
-        fol::sigma_0 as fol,
+    use super::{tau_b, tau_b_gfive_cl, tau_star, tau_star_rule, val, valtz};
+    use crate::{
+        syntax_tree::{
+            asp::mini_gringo_cl::{self as asp, BodyLiteral},
+            fol::sigma_0 as fol,
+        },
+        translating::formula_representation::tau_star_cl::tau_b_gsix_cl,
     };
     use indexmap::IndexSet;
 
@@ -1014,16 +1166,26 @@ mod tests {
                 ),
                 "forall Y (exists Z (exists I$i J$i K$i (I$i = X and J$i = Y and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and not q(Z)) -> exists Z Z1 (Z = X and Z1 = Y and p(Z, Z1)))",
             ),
+            (
+                ("X = 1..3 : q(X)", IndexSet::new()),
+                "forall X (exists Z (Z = X and q(Z)) -> exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = 1 and J$i = 3 and Z1 = K$i and I$i <= K$i <= J$i) and Z = Z1) )",
+            ),
+            (
+                ("X = 1..3 :: q(X)", IndexSet::new()),
+                "forall X (exists Z (Z = X and q(Z)) -> forall V V1 (V = X and exists I$i J$i K$i (I$i = 1 and J$i = 3 and V1 = K$i and I$i <= K$i <= J$i) -> V = V1) )",
+            ),
         ] {
             let cl: BodyLiteral = src.0.parse().unwrap();
-            match cl {
+            let src = match cl {
                 BodyLiteral::GfiveConditionalLiteral(conditional_literal) => {
-                    let src = tau_b_cl(conditional_literal, &src.1);
-                    let target = target.parse().unwrap();
-                    assert_eq!(src, target, "{src} !=\n {target}")
+                    tau_b_gfive_cl(conditional_literal, &src.1)
                 }
-                BodyLiteral::GsixConditionalLiteral(_) => todo!(),
-            }
+                BodyLiteral::GsixConditionalLiteral(conditional_literal) => {
+                    tau_b_gsix_cl(conditional_literal, &src.1)
+                }
+            };
+            let target = target.parse().unwrap();
+            assert_eq!(src, target, "{src} !=\n {target}")
         }
     }
 
