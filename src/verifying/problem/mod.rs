@@ -6,7 +6,13 @@ use {
     anyhow::{Context as _, Result},
     indexmap::IndexSet,
     itertools::Itertools,
-    std::{fmt, fs::File, io::Write as _, iter::repeat_n, path::Path},
+    std::{
+        fmt,
+        fs::File,
+        io::Write as _,
+        iter::repeat_n,
+        path::{Path, PathBuf},
+    },
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -16,7 +22,18 @@ pub enum Interpretation {
 
 impl fmt::Display for Interpretation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, include_str!("standard_interpretation.p"))
+        match self {
+            Interpretation::Standard => write!(f, include_str!("standard_interpretation.p")),
+        }
+    }
+}
+
+impl Interpretation {
+    pub fn to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = path.as_ref();
+        let mut file = File::create(path)
+            .with_context(|| format!("could not create file `{}`", path.display()))?;
+        write!(file, "{self}").with_context(|| format!("could not write file `{}`", path.display()))
     }
 }
 
@@ -78,6 +95,9 @@ pub struct Problem {
     pub name: String,
     pub interpretation: Interpretation,
     pub formulas: Vec<AnnotatedFormula>,
+    // Where to find the TPTP file encoding the Interpretation's background theory for use with an 'include' directive
+    // If None, the background theory is printed directly when the Problem is formatted
+    pub preamble: Option<PathBuf>,
 }
 
 impl Problem {
@@ -86,6 +106,7 @@ impl Problem {
             name: name.into(),
             interpretation: Interpretation::Standard,
             formulas: vec![],
+            preamble: None,
         }
     }
 
@@ -209,6 +230,7 @@ impl Problem {
                     name: format!("{}_{i}", self.name),
                     interpretation: self.interpretation.clone(),
                     formulas,
+                    preamble: self.preamble.clone(),
                 }
             })
             .collect_vec()
@@ -230,6 +252,7 @@ impl Problem {
                     name: format!("{}_{i}", self.name),
                     interpretation: self.interpretation.clone(),
                     formulas: formulas.clone(),
+                    preamble: self.preamble.clone(),
                 }
             })
             .collect_vec()
@@ -245,14 +268,13 @@ impl Problem {
 
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.interpretation)?;
+        match &self.preamble {
+            Some(path) => writeln!(f, "include({}).", path.display())?,
+            None => write!(f, "{}", self.interpretation)?,
+        }
 
         for (i, predicate) in self.predicates().into_iter().enumerate() {
             let symbol = predicate.symbol;
-            // let input: String = repeat("general")
-            //     .take(predicate.arity)
-            //     .intersperse(" * ")
-            //     .collect();
             let input: String =
                 Itertools::intersperse(repeat_n("general", predicate.arity), " * ").collect();
             if predicate.arity > 0 {
@@ -306,6 +328,7 @@ mod tests {
         let problem = Problem {
             name: "problem".into(),
             interpretation: Interpretation::Standard,
+            preamble: None,
             formulas: vec![
                 AnnotatedFormula {
                     name: "axiom_0".into(),
@@ -336,6 +359,7 @@ mod tests {
                 Problem {
                     name: "problem_0".into(),
                     interpretation: Interpretation::Standard,
+                    preamble: None,
                     formulas: vec![
                         AnnotatedFormula {
                             name: "axiom_0".into(),
@@ -357,6 +381,7 @@ mod tests {
                 Problem {
                     name: "problem_1".into(),
                     interpretation: Interpretation::Standard,
+                    preamble: None,
                     formulas: vec![
                         AnnotatedFormula {
                             name: "axiom_0".into(),
@@ -384,6 +409,7 @@ mod tests {
                 Problem {
                     name: "problem_0".into(),
                     interpretation: Interpretation::Standard,
+                    preamble: None,
                     formulas: vec![
                         AnnotatedFormula {
                             name: "axiom_0".into(),
@@ -405,6 +431,7 @@ mod tests {
                 Problem {
                     name: "problem_1".into(),
                     interpretation: Interpretation::Standard,
+                    preamble: None,
                     formulas: vec![
                         AnnotatedFormula {
                             name: "axiom_0".into(),

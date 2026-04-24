@@ -20,6 +20,7 @@ use {
             formula_representation::{mu::Mu as _, natural::Natural as _, tau_star::TauStar as _},
         },
         verifying::{
+            problem::Interpretation,
             prover::{Prover, Report, Status, Success, vampire::Vampire},
             task::{
                 Task,
@@ -465,9 +466,17 @@ pub fn main() -> Result<()> {
             };
 
             if let Some(out_dir) = out_dir {
+                // TODO: match on Interpretation
+                let mut preamble_path = out_dir.clone();
+                preamble_path.push("standard_preamble.p");
+                // Write preamble to separate file
+                Interpretation::Standard.to_file(&preamble_path)?;
+
                 for problem in &problems {
                     let mut path = out_dir.clone();
                     path.push(format!("{}.p", problem.name));
+                    let mut problem = problem.clone();
+                    problem.preamble = Some(preamble_path.clone());
                     problem.to_file(path)?;
                 }
 
