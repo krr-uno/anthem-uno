@@ -269,7 +269,7 @@ impl Problem {
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.preamble {
-            Some(path) => writeln!(f, "include({}).", path.display())?,
+            Some(path) => writeln!(f, "include('{}').", path.display())?,
             None => write!(f, "{}", self.interpretation)?,
         }
 

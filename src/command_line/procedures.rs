@@ -476,7 +476,7 @@ pub fn main() -> Result<()> {
                     let mut path = out_dir.clone();
                     path.push(format!("{}.p", problem.name));
                     let mut problem = problem.clone();
-                    problem.preamble = Some(preamble_path.clone());
+                    problem.preamble = Some(PathBuf::from("standard_preamble.p"));
                     problem.to_file(path)?;
                 }
 
