@@ -744,6 +744,12 @@ pub enum Formula {
 
 impl_node!(Formula, Format, FormulaParser);
 
+impl From<Theory> for Formula {
+    fn from(theory: Theory) -> Self {
+        Formula::conjoin(theory.formulas)
+    }
+}
+
 impl Formula {
     /// Recursively turn a list of formulas into a conjunction tree
     pub fn conjoin(formulas: impl IntoIterator<Item = Formula>) -> Formula {

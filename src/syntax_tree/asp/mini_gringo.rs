@@ -86,7 +86,9 @@ pub enum BinaryOperator {
     Subtract,
     Multiply,
     Divide,
+    DivideInteger,
     Modulo,
+    ModuloInteger,
     Interval,
 }
 
@@ -99,7 +101,9 @@ impl From<asp::mini_gringo_cl::BinaryOperator> for BinaryOperator {
             mini_gringo_cl::BinaryOperator::Subtract => BinaryOperator::Subtract,
             mini_gringo_cl::BinaryOperator::Multiply => BinaryOperator::Multiply,
             mini_gringo_cl::BinaryOperator::Divide => BinaryOperator::Divide,
+            mini_gringo_cl::BinaryOperator::DivideInteger => BinaryOperator::DivideInteger,
             mini_gringo_cl::BinaryOperator::Modulo => BinaryOperator::Modulo,
+            mini_gringo_cl::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
             mini_gringo_cl::BinaryOperator::Interval => BinaryOperator::Interval,
         }
     }
@@ -588,7 +592,10 @@ impl TryFrom<mini_gringo_cl::Body> for Body {
         let mut formulas = Vec::new();
         for formula in value.formulas {
             match formula {
-                mini_gringo_cl::BodyLiteral::ConditionalLiteral(conditional_literal) => {
+                mini_gringo_cl::BodyLiteral::GsixConditionalLiteral(_) => {
+                    return Err("Gringo 6 conditional literals may not have empty bodies");
+                }
+                mini_gringo_cl::BodyLiteral::GfiveConditionalLiteral(conditional_literal) => {
                     let is_basic = conditional_literal.basic();
                     match conditional_literal.head {
                         mini_gringo_cl::ConditionalHead::AtomicFormula(atomic_formula) => {

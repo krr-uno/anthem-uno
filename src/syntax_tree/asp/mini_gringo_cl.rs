@@ -2,8 +2,8 @@ use {
     crate::{
         formatting::asp::mini_gringo_cl::default::Format,
         parsing::asp::mini_gringo_cl::pest::{
-            AtomParser, AtomicFormulaParser, BinaryOperatorParser, BodyParser, ComparisonParser,
-            ConditionalBodyParser, ConditionalHeadParser, ConditionalLiteralParser, HeadParser,
+            AtomParser, AtomicFormulaParser, BinaryOperatorParser, BodyLiteralParser, BodyParser,
+            ComparisonParser, ConditionalBodyParser, ConditionalHeadParser, HeadParser,
             LiteralParser, PrecomputedTermParser, PredicateParser, ProgramParser, RelationParser,
             RuleParser, SignParser, TermParser, UnaryOperatorParser, VariableParser,
         },
@@ -78,7 +78,9 @@ pub enum BinaryOperator {
     Subtract,
     Multiply,
     Divide,
+    DivideInteger,
     Modulo,
+    ModuloInteger,
     Interval,
 }
 
@@ -91,7 +93,9 @@ impl From<asp::mini_gringo::BinaryOperator> for BinaryOperator {
             asp::mini_gringo::BinaryOperator::Subtract => BinaryOperator::Subtract,
             asp::mini_gringo::BinaryOperator::Multiply => BinaryOperator::Multiply,
             asp::mini_gringo::BinaryOperator::Divide => BinaryOperator::Divide,
+            asp::mini_gringo::BinaryOperator::DivideInteger => BinaryOperator::DivideInteger,
             asp::mini_gringo::BinaryOperator::Modulo => BinaryOperator::Modulo,
+            asp::mini_gringo::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
             asp::mini_gringo::BinaryOperator::Interval => BinaryOperator::Interval,
         }
     }
@@ -485,8 +489,6 @@ pub struct ConditionalLiteral {
     pub conditions: ConditionalBody,
 }
 
-impl_node!(ConditionalLiteral, Format, ConditionalLiteralParser);
-
 impl From<asp::mini_gringo::AtomicFormula> for ConditionalLiteral {
     fn from(value: asp::mini_gringo::AtomicFormula) -> Self {
         ConditionalLiteral {
@@ -597,44 +599,57 @@ impl From<asp::mini_gringo::Head> for Head {
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BodyLiteral {
-    ConditionalLiteral(ConditionalLiteral),
+    /// Corresponds to a Gringo 5 Conditional Literal
+    GfiveConditionalLiteral(ConditionalLiteral),
+    /// Corresponds to a Gringo 6 Conditional Literal
+    GsixConditionalLiteral(ConditionalLiteral),
 }
+
+impl_node!(BodyLiteral, Format, BodyLiteralParser);
 
 impl BodyLiteral {
     pub fn predicates(&self) -> IndexSet<Predicate> {
         match self {
-            BodyLiteral::ConditionalLiteral(l) => l.predicates(),
+            BodyLiteral::GfiveConditionalLiteral(l) | BodyLiteral::GsixConditionalLiteral(l) => {
+                l.predicates()
+            }
         }
     }
 
     pub fn positive_predicates(&self) -> IndexSet<Predicate> {
         match self {
-            BodyLiteral::ConditionalLiteral(l) => l.positive_predicates(),
+            BodyLiteral::GfiveConditionalLiteral(l) => l.positive_predicates(),
+            BodyLiteral::GsixConditionalLiteral(_) => todo!("what are positive_predicates?"),
         }
     }
 
     pub fn variables(&self) -> IndexSet<Variable> {
         match self {
-            BodyLiteral::ConditionalLiteral(l) => l.variables(),
+            BodyLiteral::GfiveConditionalLiteral(l) | BodyLiteral::GsixConditionalLiteral(l) => {
+                l.variables()
+            }
         }
     }
 
     pub fn function_constants(&self) -> IndexSet<String> {
         match self {
-            BodyLiteral::ConditionalLiteral(l) => l.function_constants(),
+            BodyLiteral::GfiveConditionalLiteral(l) | BodyLiteral::GsixConditionalLiteral(l) => {
+                l.function_constants()
+            }
         }
     }
 
     pub fn global_variables(&self) -> IndexSet<Variable> {
         match self {
-            BodyLiteral::ConditionalLiteral(l) => l.global_variables(),
+            BodyLiteral::GfiveConditionalLiteral(l) => l.global_variables(),
+            BodyLiteral::GsixConditionalLiteral(_) => IndexSet::new(),
         }
     }
 }
 
 impl From<asp::mini_gringo::AtomicFormula> for BodyLiteral {
     fn from(value: asp::mini_gringo::AtomicFormula) -> Self {
-        BodyLiteral::ConditionalLiteral(value.into())
+        BodyLiteral::GfiveConditionalLiteral(value.into())
     }
 }
 
@@ -841,7 +856,7 @@ mod tests {
                     terms: vec![],
                 }),
                 body: Body {
-                    formulas: vec![BodyLiteral::ConditionalLiteral(ConditionalLiteral {
+                    formulas: vec![BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
                         head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
                             Comparison {
                                 lhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())),

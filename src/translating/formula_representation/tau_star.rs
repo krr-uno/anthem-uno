@@ -431,6 +431,9 @@ fn val(t: asp::Term, z: fol::Variable) -> fol::Formula {
                 asp::BinaryOperator::Interval => {
                     construct_interval_formula(valti, valtj, var1, var2, var3, z)
                 }
+                asp::BinaryOperator::DivideInteger | asp::BinaryOperator::ModuloInteger => {
+                    unimplemented!("mini-gringo does not support gringo 6 division or modulo")
+                }
             }
         }
     }

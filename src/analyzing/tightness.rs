@@ -207,6 +207,25 @@ impl mini_gringo::Program {
     }
 }
 
+impl mini_gringo_cl::Program {
+    pub(crate) fn predicate_dependency_graph(
+        &self,
+        intensional_predicates: IndexSet<mini_gringo_cl::Predicate>,
+    ) -> DiGraph<String, i32> {
+        let formula_representation = self.clone().tau_star();
+        let intensional: IndexSet<fol::Predicate> = intensional_predicates
+            .into_iter()
+            .map(|p| p.into())
+            .collect();
+        match formula_representation.predicate_dependency_graph(intensional) {
+            Some(graph) => graph,
+            None => panic!(
+                "this program's formula representation could not be converted to Clark Normal Form"
+            ),
+        }
+    }
+}
+
 pub trait Tightness {
     fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool;
 }
