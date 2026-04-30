@@ -122,6 +122,10 @@ pub enum Command {
         #[arg(long, action)]
         no_timing: bool,
 
+        /// Generate a countermodel file
+        #[arg(long, action)]
+        countermodel: bool,
+
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
         time_limit: usize,
@@ -189,6 +193,7 @@ pub enum InductionSchedule {
 pub enum Property {
     Regularity,
     Tightness,
+    BackwardsCompatibility,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
