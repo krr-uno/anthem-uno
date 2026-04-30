@@ -18,7 +18,6 @@ use {
         },
     },
     std::convert::Infallible,
-    thiserror::Error,
 };
 
 // #[derive(Error, Debug)]
