@@ -21,8 +21,8 @@ use {
     thiserror::Error,
 };
 
-#[derive(Error, Debug)]
-pub enum StrongEquivalenceTaskError {}
+// #[derive(Error, Debug)]
+// pub enum StrongEquivalenceTaskError {}
 
 pub struct StrongEquivalenceTask {
     pub left: asp::Program,
@@ -61,7 +61,8 @@ impl StrongEquivalenceTask {
 }
 
 impl Task for StrongEquivalenceTask {
-    type Error = StrongEquivalenceTaskError;
+    //type Error = StrongEquivalenceTaskError;
+    type Error = Infallible;
     type Warning = Infallible;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
@@ -204,7 +205,8 @@ impl StrongEquivalenceCounterModelTask {
 }
 
 impl Task for StrongEquivalenceCounterModelTask {
-    type Error = StrongEquivalenceTaskError;
+    //type Error = StrongEquivalenceTaskError;
+    type Error = Infallible;
     type Warning = Infallible;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
