@@ -193,6 +193,7 @@ pub enum InductionSchedule {
 pub enum Property {
     Regularity,
     Tightness,
+    BackwardsCompatibility,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

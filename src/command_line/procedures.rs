@@ -1,6 +1,9 @@
 use {
     crate::{
-        analyzing::{regularity::Regularity as _, tightness::Tightness},
+        analyzing::{
+            backwards_compatibility::BackwardsCompatibility, regularity::Regularity as _,
+            tightness::Tightness,
+        },
         command_line::{
             Program,
             arguments::{
@@ -129,6 +132,21 @@ pub fn main() -> Result<()> {
                         println!("{is_tight}");
                     }
                 },
+                Property::BackwardsCompatibility => {
+                    let program = input.map_or_else(
+                        asp::mini_gringo_cl::Program::from_stdin,
+                        asp::mini_gringo_cl::Program::from_file,
+                    )?;
+                    if program.is_provably_backwards_compatible() {
+                        println!(
+                            "program is backwards-compatible with respect to conditional literals"
+                        );
+                    } else {
+                        println!(
+                            "program contains conditional literals which may not be backwards-compatible"
+                        );
+                    }
+                }
             }
 
             Ok(())
