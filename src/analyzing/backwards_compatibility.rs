@@ -1,5 +1,6 @@
 use crate::syntax_tree::asp::mini_gringo_cl::{
-    AtomicFormula, Body, BodyLiteral, ConditionalHead, ConditionalLiteral, Program, Rule, Term,
+    Atom, AtomicFormula, Body, BodyLiteral, Comparison, ConditionalHead, ConditionalLiteral,
+    Literal, Program, Rule, Term,
 };
 
 impl Term {
@@ -11,6 +12,48 @@ impl Term {
         match self {
             Term::PrecomputedTerm(_) | Term::Variable(_) => false,
             Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
+        }
+    }
+}
+
+impl Atom {
+    pub fn contains_arithmetic_operations(&self) -> bool {
+        let mut contains_arithmetic = false;
+        for t in self.terms.iter() {
+            if t.contains_arithmetic_operations() {
+                contains_arithmetic = true;
+            }
+        }
+        contains_arithmetic
+    }
+}
+
+impl Literal {
+    pub fn contains_arithmetic_operations(&self) -> bool {
+        self.atom.contains_arithmetic_operations()
+    }
+}
+
+impl Comparison {
+    pub fn contains_arithmetic_operations(&self) -> bool {
+        self.lhs.contains_arithmetic_operations() || self.rhs.contains_arithmetic_operations()
+    }
+}
+
+impl AtomicFormula {
+    pub fn contains_arithmetic_operations(&self) -> bool {
+        match self {
+            AtomicFormula::Literal(literal) => literal.contains_arithmetic_operations(),
+            AtomicFormula::Comparison(comparison) => comparison.contains_arithmetic_operations(),
+        }
+    }
+}
+
+impl ConditionalHead {
+    pub fn contains_arithmetic_operations(&self) -> bool {
+        match self {
+            ConditionalHead::AtomicFormula(formula) => formula.contains_arithmetic_operations(),
+            ConditionalHead::Falsity => false,
         }
     }
 }
@@ -55,28 +98,14 @@ fn backwards_compatible(r1: &Rule, r2: &Rule, l: &ConditionalLiteral) -> bool {
     let r1_globals = r1.global_variables();
     let r2_globals = r2.global_variables();
 
+    // If r1 and r2 have different global variables, they are not backwards-compatible
     if r1_globals.difference(&r2_globals).next().is_some()
         || r2_globals.difference(&r1_globals).next().is_some()
     {
         false
     } else {
-        match &l.head {
-            ConditionalHead::AtomicFormula(formula) => match formula {
-                AtomicFormula::Literal(literal) => {
-                    let mut arithmetic = false;
-                    for term in literal.atom.terms.iter() {
-                        if term.contains_arithmetic_operations() {
-                            arithmetic = true;
-                        }
-                    }
-                    !arithmetic
-                }
-                AtomicFormula::Comparison(comparison) => {
-                    comparison.lhs.is_precomputed() && comparison.rhs.is_precomputed()
-                }
-            },
-            ConditionalHead::Falsity => true,
-        }
+        // Otherwise, they are backwards-compatible if the head does not contain operations
+        !l.head.contains_arithmetic_operations()
     }
 }
 
@@ -128,6 +157,8 @@ mod tests {
             "a :- b; 1 = 1 :: q(X+1), not r(X).",
             "a :- #false :: q(X+1); p(X) :: q(X).",
             "p :- t :: q.",
+            "p(X) :- X > 5 :: q(X).",
+            "p(X+1) :- not r(X,Y) :: q(X,Y+1).",
         ] {
             let rule: Rule = rule.parse().unwrap();
             assert!(rule.is_provably_backwards_compatible())
@@ -136,8 +167,10 @@ mod tests {
         for rule in [
             ":- X = 1..3 :: q(X).",
             "p(X) :- t(X,Y) :: not q(X).",
-            "a :- b; 1 = X :: q(X+1), not r(X).",
+            "a :- b; 1 = X+1 :: q(X+1), not r(X).",
             "a :- #false :: q(X+1); p(|X|) :: q(X).",
+            "p :- q(X,Y) :: r(X).",
+            "p :- X = 1..3 :: q(X).",
         ] {
             let rule: Rule = rule.parse().unwrap();
             assert!(!rule.is_provably_backwards_compatible())
