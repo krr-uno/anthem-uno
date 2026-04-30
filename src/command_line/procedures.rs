@@ -310,6 +310,7 @@ pub fn main() -> Result<()> {
             dialect,
             formula_representation,
             backend,
+            countermodel,
         } => {
             let start_time = Instant::now();
 
@@ -481,18 +482,20 @@ pub fn main() -> Result<()> {
                 }
 
                 // emit countermodel task
-                if let Some(task) = countermodel_task {
-                    let countermodel_problems = task.decompose()?.report_warnings();
-                    assert_eq!(
-                        countermodel_problems.len(),
-                        1,
-                        "countermodel task should only have one problem file"
-                    );
-                    let counter_problem = countermodel_problems[0].clone();
-                    let mut path = out_dir.clone();
-                    path.push(format!("{}.p", counter_problem.name));
-                    counter_problem.to_file(path.clone())?;
-                    convert_to_smt2(path)?;
+                if countermodel {
+                    if let Some(task) = countermodel_task {
+                        let countermodel_problems = task.decompose()?.report_warnings();
+                        assert_eq!(
+                            countermodel_problems.len(),
+                            1,
+                            "countermodel task should only have one problem file"
+                        );
+                        let counter_problem = countermodel_problems[0].clone();
+                        let mut path = out_dir.clone();
+                        path.push(format!("{}.p", counter_problem.name));
+                        counter_problem.to_file(path.clone())?;
+                        convert_to_smt2(path)?;
+                    }
                 }
             }
 
