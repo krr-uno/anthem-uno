@@ -167,8 +167,8 @@ impl Task for StrongEquivalenceTask {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum StrongEquivalenceCounterModelTaskError {}
+// #[derive(Error, Debug)]
+// pub enum StrongEquivalenceCounterModelTaskError {}
 
 pub struct StrongEquivalenceCounterModelTask {
     pub left: asp::Program,
