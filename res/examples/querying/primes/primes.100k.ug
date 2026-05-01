@@ -1,0 +1,7 @@
+input: a -> integer.
+input: b -> integer.
+
+assumption: a = 2.
+assumption: b = 100000.
+
+output: prime/1.

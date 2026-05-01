@@ -1,6 +1,6 @@
 use {
     crate::{
-        convenience::{apply::Apply as _, variable_selection::VariableSelection},
+        convenience::{apply::Apply as _, unbox::Unbox, variable_selection::VariableSelection},
         formatting::fol::sigma_0::default::Format,
         parsing::fol::sigma_0::pest::{
             AnnotatedFormulaParser, AtomParser, AtomicFormulaParser, BinaryConnectiveParser,
@@ -20,6 +20,10 @@ use {
     indexmap::{IndexMap, IndexSet},
     std::hash::Hash,
 };
+
+pub(crate) trait IntegerConversion {
+    fn convert_to_integer_theory(self) -> Self;
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UnaryOperator {
@@ -750,6 +754,54 @@ impl From<Theory> for Formula {
     }
 }
 
+impl IntegerConversion for Formula {
+    // TODO: Fill other match arms
+    // Currently only the outermost quantified variables are being replaced
+    fn convert_to_integer_theory(self) -> Formula {
+        let taken_vars = self.variables();
+        match self {
+            Formula::QuantifiedFormula {
+                quantification:
+                    Quantification {
+                        quantifier: Quantifier::Forall,
+                        variables,
+                    },
+                formula,
+            } => {
+                let mut formula = *formula;
+                let fresh_int_vars = taken_vars.choose_fresh_variables("N", variables.len());
+                for (index, var) in variables.into_iter().enumerate() {
+                    let term = GeneralTerm::IntegerTerm(IntegerTerm::Variable(
+                        fresh_int_vars[index].clone(),
+                    ));
+                    formula = formula.substitute(var, term);
+                }
+
+                formula.universal_closure_with_quantifier_joining()
+            }
+
+            Formula::AtomicFormula(AtomicFormula::Atom(a)) => {
+                Formula::AtomicFormula(AtomicFormula::Atom(a))
+            }
+
+            Formula::UnaryFormula { 
+                connective: UnaryConnective::Negation, 
+                formula,
+            } => match formula.unbox() {
+                crate::convenience::unbox::fol::sigma_0::UnboxedFormula::AtomicFormula(AtomicFormula::Atom(a)) => {
+                    Formula::UnaryFormula { 
+                        connective: UnaryConnective::Negation,
+                        formula: Formula::AtomicFormula(AtomicFormula::Atom(a)).into(),
+                    }
+                },
+                _ => todo!()
+            }
+
+            _ => todo!(),
+        }
+    }
+}
+
 impl Formula {
     /// Recursively turn a list of formulas into a conjunction tree
     pub fn conjoin(formulas: impl IntoIterator<Item = Formula>) -> Formula {
@@ -1009,6 +1061,14 @@ pub struct Theory {
 
 impl_node!(Theory, Format, TheoryParser);
 
+impl IntegerConversion for Theory {
+    fn convert_to_integer_theory(self) -> Theory {
+        self.into_iter()
+            .map(|f| f.convert_to_integer_theory())
+            .collect()
+    }
+}
+
 impl Theory {
     pub fn predicates(&self) -> IndexSet<Predicate> {
         let mut preds = IndexSet::new();
@@ -1072,6 +1132,17 @@ pub struct AnnotatedFormula {
 
 impl_node!(AnnotatedFormula, Format, AnnotatedFormulaParser);
 
+impl IntegerConversion for AnnotatedFormula {
+    fn convert_to_integer_theory(self) -> Self {
+        AnnotatedFormula {
+            role: self.role,
+            direction: self.direction,
+            name: self.name,
+            formula: self.formula.convert_to_integer_theory(),
+        }
+    }
+}
+
 impl AnnotatedFormula {
     pub fn into_problem_formula(self, role: problem::Role) -> problem::AnnotatedFormula {
         problem::AnnotatedFormula {
@@ -1110,6 +1181,14 @@ impl AnnotatedFormula {
     pub fn replace_placeholders(mut self, mapping: &IndexMap<String, FunctionConstant>) -> Self {
         self.formula = self.formula.replace_placeholders(mapping);
         self
+    }
+}
+
+impl IntegerConversion for Vec<AnnotatedFormula> {
+    fn convert_to_integer_theory(self) -> Self {
+        self.into_iter()
+            .map(|f| f.convert_to_integer_theory())
+            .collect()
     }
 }
 
