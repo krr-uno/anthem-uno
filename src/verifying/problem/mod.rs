@@ -18,12 +18,14 @@ use {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Interpretation {
     Standard,
+    Integer,
 }
 
 impl fmt::Display for Interpretation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Interpretation::Standard => write!(f, include_str!("standard_interpretation.p")),
+            Interpretation::Integer => Ok(()),
         }
     }
 }
@@ -101,10 +103,10 @@ pub struct Problem {
 }
 
 impl Problem {
-    pub fn with_name<S: Into<String>>(name: S) -> Problem {
+    pub fn with_name<S: Into<String>>(name: S, interpretation: Interpretation) -> Problem {
         Problem {
             name: name.into(),
-            interpretation: Interpretation::Standard,
+            interpretation,
             formulas: vec![],
             preamble: None,
         }
@@ -268,15 +270,19 @@ impl Problem {
 
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.preamble {
-            Some(path) => writeln!(f, "include('{}').", path.display())?,
-            None => write!(f, "{}", self.interpretation)?,
-        }
+        if matches!(self.interpretation, Interpretation::Standard) {
+            match &self.preamble {
+                Some(path) => writeln!(f, "include('{}').", path.display())?,
+                None => write!(f, "{}", self.interpretation)?,
+            }
+        };
 
         for (i, predicate) in self.predicates().into_iter().enumerate() {
             let symbol = predicate.symbol;
-            let input: String =
-                Itertools::intersperse(repeat_n("general", predicate.arity), " * ").collect();
+            let input: String = match self.interpretation {
+                Interpretation::Standard => Itertools::intersperse(repeat_n("general", predicate.arity), " * ").collect(),
+                Interpretation::Integer => Itertools::intersperse(repeat_n("$int", predicate.arity), " * ").collect(),
+            };
             if predicate.arity > 0 {
                 if predicate.arity == 1 {
                     writeln!(f, "tff(predicate_{i}, type, {symbol}: {input} > $o).")?

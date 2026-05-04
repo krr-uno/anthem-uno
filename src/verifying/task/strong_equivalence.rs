@@ -7,13 +7,17 @@ use {
             with_warnings::{Result, WithWarnings},
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{GenericPredicate, asp::mini_gringo_cl as asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            GenericPredicate,
+            asp::mini_gringo_cl as asp,
+            fol::sigma_0::{self as fol, IntegerConversion as _},
+        },
         translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
             formula_representation::tau_star::TauStar,
         },
         verifying::{
-            problem::{AnnotatedFormula, Problem, Role},
+            problem::{AnnotatedFormula, Interpretation, Problem, Role},
             task::Task,
         },
     },
@@ -30,6 +34,7 @@ pub struct StrongEquivalenceTask {
     pub direction: fol::Direction,
     pub simplify: bool,
     pub break_equivalences: bool,
+    pub int_only: bool,
 }
 
 impl StrongEquivalenceTask {
@@ -65,7 +70,7 @@ impl Task for StrongEquivalenceTask {
     type Warning = Infallible;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
-        let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
+        let mut transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
 
         let mut left = self.left.tau_star();
         let mut right = self.right.tau_star();
@@ -80,6 +85,12 @@ impl Task for StrongEquivalenceTask {
                 .into_iter()
                 .map(|f| f.apply_fixpoint(&mut portfolio))
                 .collect();
+        }
+
+        if self.int_only {
+            transition_axioms = transition_axioms.convert_to_integer_theory();
+            left = left.convert_to_integer_theory();
+            right = right.convert_to_integer_theory();
         }
 
         left = left.gamma();
@@ -102,13 +113,18 @@ impl Task for StrongEquivalenceTask {
             right = crate::breaking::fol::sigma_0::ht::break_equivalences_theory(right);
         }
 
+        let mut interpretation = Interpretation::Standard;
+        if self.int_only {
+            interpretation = Interpretation::Integer;
+        }
+
         let mut problems = Vec::new();
         if matches!(
             self.direction,
             fol::Direction::Universal | fol::Direction::Forward
         ) {
             problems.push(
-                Problem::with_name("forward")
+                Problem::with_name("forward", interpretation.clone())
                     .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
                         role: Role::Axiom,
@@ -133,7 +149,7 @@ impl Task for StrongEquivalenceTask {
             fol::Direction::Universal | fol::Direction::Backward
         ) {
             problems.push(
-                Problem::with_name("backward")
+                Problem::with_name("backward", interpretation)
                     .add_theory(transition_axioms, |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
                         role: Role::Axiom,
@@ -173,6 +189,7 @@ pub struct StrongEquivalenceCounterModelTask {
     pub left: asp::Program,
     pub right: asp::Program,
     pub simplify: bool,
+    pub int_only: bool,
 }
 
 // TODO: refactor to use the same code as StrongEquivalenceTask
@@ -249,11 +266,16 @@ impl Task for StrongEquivalenceCounterModelTask {
             rhs: Box::new(right.into()),
         };
 
+        let mut interpretation = Interpretation::Standard;
+        if self.int_only {
+            interpretation = Interpretation::Integer;
+        }
+
         let conjecture = fol::Theory { formulas: vec![f] };
 
         let mut problems = Vec::new();
         problems.push(
-            Problem::with_name("countermodel")
+            Problem::with_name("countermodel", interpretation)
                 .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
                     name: format!("transition_axiom_{i}"),
                     role: Role::Axiom,

@@ -81,7 +81,7 @@ impl Display for Format<'_, GeneralTerm> {
             GeneralTerm::Supremum => write!(f, "c__supremum__"),
             GeneralTerm::FunctionConstant(c) => write!(f, "{c}_g"),
             GeneralTerm::Variable(v) => write!(f, "{v}_g"),
-            GeneralTerm::IntegerTerm(t) => write!(f, "f__integer__({})", Format(t)),
+            GeneralTerm::IntegerTerm(t) => write!(f, "{}", Format(t)),
             GeneralTerm::SymbolicTerm(t) => write!(f, "f__symbolic__({})", Format(t)),
         }
     }

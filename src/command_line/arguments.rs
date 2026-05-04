@@ -126,6 +126,10 @@ pub enum Command {
         #[arg(long, action)]
         countermodel: bool,
 
+        /// Remove standard preamble in favor of a one-sorted, integer-only background theory
+        #[arg(long, action)]
+        int_only: bool,
+
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
         time_limit: usize,

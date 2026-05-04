@@ -329,6 +329,7 @@ pub fn main() -> Result<()> {
             formula_representation,
             backend,
             countermodel,
+            int_only,
         } => {
             let start_time = Instant::now();
 
@@ -357,6 +358,7 @@ pub fn main() -> Result<()> {
                                 direction,
                                 simplify: !no_simplify,
                                 break_equivalences: !no_eq_break,
+                                int_only,
                             }
                             .decompose()?
                             .report_warnings(),
@@ -364,6 +366,7 @@ pub fn main() -> Result<()> {
                                 left,
                                 right,
                                 simplify: !no_simplify,
+                                int_only,
                             }),
                         )
                     }
@@ -388,6 +391,7 @@ pub fn main() -> Result<()> {
                                 direction,
                                 simplify: !no_simplify,
                                 break_equivalences: !no_eq_break,
+                                int_only,
                             }
                             .decompose()?
                             .report_warnings(),
@@ -395,6 +399,7 @@ pub fn main() -> Result<()> {
                                 left: left.into(),
                                 right: right.into(),
                                 simplify: !no_simplify,
+                                int_only,
                             }),
                         )
                     }
@@ -432,6 +437,7 @@ pub fn main() -> Result<()> {
                             bypass_tightness,
                             simplify: !no_simplify,
                             break_equivalences: !no_eq_break,
+                            int_only,
                         }
                         .decompose()?
                         .report_warnings(),
@@ -475,6 +481,7 @@ pub fn main() -> Result<()> {
                                 bypass_tightness,
                                 simplify: !no_simplify,
                                 break_equivalences: !no_eq_break,
+                                int_only,
                             }
                             .decompose()?
                             .report_warnings(),

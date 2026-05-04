@@ -11,7 +11,7 @@ use {
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
             asp::{mini_gringo, mini_gringo_cl as asp},
-            fol::sigma_0 as fol,
+            fol::sigma_0::{self as fol, IntegerConversion},
         },
         translating::{
             classical_reduction::completion::Completion as _,
@@ -21,7 +21,7 @@ use {
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
-            problem::{self, Problem},
+            problem::{self, Interpretation, Problem},
             task::Task,
         },
     },
@@ -361,6 +361,7 @@ pub struct ExternalEquivalenceTask {
     pub bypass_tightness: bool,
     pub simplify: bool,
     pub break_equivalences: bool,
+    pub int_only: bool,
 }
 
 impl ExternalEquivalenceTask {
@@ -859,6 +860,7 @@ impl Task for ExternalEquivalenceTask {
             decomposition: self.decomposition,
             direction: self.direction,
             break_equivalences: self.break_equivalences,
+            int_only: self.int_only,
         }
         .decompose()?
         .preface_warnings(warnings))
@@ -873,6 +875,7 @@ struct ValidatedExternalEquivalenceTask {
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
     pub break_equivalences: bool,
+    pub int_only: bool,
 }
 
 impl Task for ValidatedExternalEquivalenceTask {
@@ -884,6 +887,14 @@ impl Task for ValidatedExternalEquivalenceTask {
             syntax_tree::fol::sigma_0::{Direction::*, Role::*},
             verifying::problem::Role::*,
         };
+
+        let mut left = self.left;
+        let mut right = self.right;
+
+        if self.int_only {
+            left = left.convert_to_integer_theory();
+            right = right.convert_to_integer_theory();
+        }
 
         let mut stable_premises: Vec<_> = self
             .user_guide_assumptions
@@ -898,7 +909,7 @@ impl Task for ValidatedExternalEquivalenceTask {
 
         let mut warnings = Vec::new();
 
-        for formula in self.left {
+        for formula in left {
             match formula.role {
                 Assumption | Definition => match formula.direction {
                     Universal => stable_premises.push(formula.into_problem_formula(Axiom)),
@@ -925,7 +936,7 @@ impl Task for ValidatedExternalEquivalenceTask {
             }
         }
 
-        for formula in self.right {
+        for formula in right {
             match formula.role {
                 Assumption => match formula.direction {
                     Universal => stable_premises.push(formula.into_problem_formula(Axiom)),
@@ -961,6 +972,7 @@ impl Task for ValidatedExternalEquivalenceTask {
             proof_outline: self.proof_outline,
             decomposition: self.decomposition,
             direction: self.direction,
+            int_only: self.int_only,
         }
         .decompose()?
         .preface_warnings(warnings))
@@ -976,6 +988,7 @@ struct AssembledExternalEquivalenceTask {
     pub proof_outline: ProofOutline,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
+    pub int_only: bool,
 }
 
 impl Task for AssembledExternalEquivalenceTask {
@@ -983,6 +996,11 @@ impl Task for AssembledExternalEquivalenceTask {
     type Warning = ExternalEquivalenceTaskWarning;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
+        let mut interpretation = Interpretation::Standard;
+        if self.int_only {
+            interpretation = Interpretation::Integer;
+        }
+
         let mut problems = Vec::new();
 
         if matches!(
@@ -1001,18 +1019,21 @@ impl Task for AssembledExternalEquivalenceTask {
             for (i, lemma) in self.proof_outline.forward_lemmas.iter().enumerate() {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
-                        Problem::with_name(format!("forward_outline_{i}_{j}"))
-                            .add_annotated_formulas(axioms.clone())
-                            .add_annotated_formulas(std::iter::once(conjecture.clone()))
-                            .rename_conflicting_symbols()
-                            .create_unique_formula_names(),
+                        Problem::with_name(
+                            format!("forward_outline_{i}_{j}"),
+                            interpretation.clone(),
+                        )
+                        .add_annotated_formulas(axioms.clone())
+                        .add_annotated_formulas(std::iter::once(conjecture.clone()))
+                        .rename_conflicting_symbols()
+                        .create_unique_formula_names(),
                     );
                 }
                 axioms.append(&mut lemma.consequences.clone());
             }
 
             problems.append(
-                &mut Problem::with_name("forward_problem")
+                &mut Problem::with_name("forward_problem", interpretation.clone())
                     .add_annotated_formulas(self.stable_premises.clone())
                     .add_annotated_formulas(self.forward_premises)
                     .add_annotated_formulas(
@@ -1044,18 +1065,21 @@ impl Task for AssembledExternalEquivalenceTask {
             for (i, lemma) in self.proof_outline.backward_lemmas.iter().enumerate() {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
-                        Problem::with_name(format!("backward_outline_{i}_{j}"))
-                            .add_annotated_formulas(axioms.clone())
-                            .add_annotated_formulas(std::iter::once(conjecture.clone()))
-                            .rename_conflicting_symbols()
-                            .create_unique_formula_names(),
+                        Problem::with_name(
+                            format!("backward_outline_{i}_{j}"),
+                            interpretation.clone(),
+                        )
+                        .add_annotated_formulas(axioms.clone())
+                        .add_annotated_formulas(std::iter::once(conjecture.clone()))
+                        .rename_conflicting_symbols()
+                        .create_unique_formula_names(),
                     );
                 }
                 axioms.append(&mut lemma.consequences.clone());
             }
 
             problems.append(
-                &mut Problem::with_name("backward_problem")
+                &mut Problem::with_name("backward_problem", interpretation)
                     .add_annotated_formulas(self.stable_premises)
                     .add_annotated_formulas(self.backward_premises)
                     .add_annotated_formulas(
