@@ -7,7 +7,7 @@ use {
         command_line::{
             Program,
             arguments::{
-                Arguments, Command, Dialect, Equivalence, Output, ParseAs, Property,
+                Arguments, Command, Equivalence, Fragment, Output, ParseAs, Property,
                 SimplificationPortfolio, SimplificationStrategy, Translation, Visualization,
             },
             files::Files,
@@ -45,7 +45,7 @@ use {
     },
 };
 
-fn get_program_of_unknown_dialect(input: Option<PathBuf>) -> Result<Program> {
+fn get_program_of_unknown_fragment(input: Option<PathBuf>) -> Result<Program> {
     let contents = match input {
         Some(path) => {
             let path: &Path = path.as_ref();
@@ -69,11 +69,11 @@ pub fn main() -> Result<()> {
         Command::Analyze {
             property,
             input,
-            dialect,
+            fragment,
         } => {
             match property {
-                Property::Regularity => match dialect {
-                    Dialect::MiniGringo => {
+                Property::Regularity => match fragment {
+                    Fragment::MiniGringo => {
                         let program = input.map_or_else(
                             asp::mini_gringo::Program::from_stdin,
                             asp::mini_gringo::Program::from_file,
@@ -81,13 +81,13 @@ pub fn main() -> Result<()> {
                         let is_regular = program.is_regular();
                         println!("{is_regular}");
                     }
-                    Dialect::MiniGringoCL => {
+                    Fragment::MiniGringoCL => {
                         println!("operation unsupported for mg-cl programs");
                     }
                 },
 
-                Property::Tightness => match dialect {
-                    Dialect::MiniGringo => {
+                Property::Tightness => match fragment {
+                    Fragment::MiniGringo => {
                         let program = input.map_or_else(
                             asp::mini_gringo::Program::from_stdin,
                             asp::mini_gringo::Program::from_file,
@@ -97,7 +97,7 @@ pub fn main() -> Result<()> {
                         let is_tight = program.is_tight(intensional_predicates);
                         println!("{is_tight}");
                     }
-                    Dialect::MiniGringoCL => {
+                    Fragment::MiniGringoCL => {
                         let program = input.map_or_else(
                             asp::mini_gringo_cl::Program::from_stdin,
                             asp::mini_gringo_cl::Program::from_file,
@@ -254,7 +254,7 @@ pub fn main() -> Result<()> {
                 }
 
                 Translation::Mu => {
-                    let program = get_program_of_unknown_dialect(input)?;
+                    let program = get_program_of_unknown_fragment(input)?;
                     match program {
                         Program::MiniGringo(program) => program.mu(),
                         Program::MiniGringoCl(_) => todo!(),
@@ -262,7 +262,7 @@ pub fn main() -> Result<()> {
                 }
 
                 Translation::Natural => {
-                    let program = get_program_of_unknown_dialect(input)?;
+                    let program = get_program_of_unknown_fragment(input)?;
                     match program {
                         Program::MiniGringo(program) => program
                             .natural(false)
@@ -272,7 +272,7 @@ pub fn main() -> Result<()> {
                 }
 
                 Translation::TauStar => {
-                    let program = get_program_of_unknown_dialect(input)?;
+                    let program = get_program_of_unknown_fragment(input)?;
                     program.tau_star()
                 }
             };
@@ -301,7 +301,6 @@ pub fn main() -> Result<()> {
             prover_cores,
             save_problems: out_dir,
             files,
-            dialect,
             formula_representation,
             backend,
         } => {
@@ -311,132 +310,58 @@ pub fn main() -> Result<()> {
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
             let problems = match equivalence {
-                Equivalence::Strong => match dialect {
-                    Dialect::MiniGringoCL => {
-                        let left = asp::mini_gringo_cl::Program::from_file(
-                            files
-                                .left()
-                                .ok_or(anyhow!("no left program was provided"))?,
-                        )?;
-                        let right = asp::mini_gringo_cl::Program::from_file(
-                            files
-                                .right()
-                                .ok_or(anyhow!("no right program was provided"))?,
-                        )?;
+                Equivalence::Strong => StrongEquivalenceTask {
+                    left: asp::mini_gringo_cl::Program::from_file(
+                        files
+                            .left()
+                            .ok_or(anyhow!("no left program was provided"))?,
+                    )?,
+                    right: asp::mini_gringo_cl::Program::from_file(
+                        files
+                            .right()
+                            .ok_or(anyhow!("no right program was provided"))?,
+                    )?,
+                    decomposition,
+                    direction,
+                    simplify: !no_simplify,
+                    break_equivalences: !no_eq_break,
+                }
+                .decompose()?
+                .report_warnings(),
 
-                        StrongEquivalenceTask {
-                            left: left.clone(),
-                            right: right.clone(),
-                            decomposition,
-                            direction,
-                            simplify: !no_simplify,
-                            break_equivalences: !no_eq_break,
+                Equivalence::External => ExternalEquivalenceTask {
+                    specification: match files
+                        .specification()
+                        .ok_or(anyhow!("no specification was provided"))?
+                    {
+                        Either::Left(program) => {
+                            Either::Left(asp::mini_gringo_cl::Program::from_file(program)?)
                         }
-                        .decompose()?
-                        .report_warnings()
-                    }
-
-                    Dialect::MiniGringo => {
-                        let left = asp::mini_gringo::Program::from_file(
-                            files
-                                .left()
-                                .ok_or(anyhow!("no left program was provided"))?,
-                        )?;
-                        let right = asp::mini_gringo::Program::from_file(
-                            files
-                                .right()
-                                .ok_or(anyhow!("no right program was provided"))?,
-                        )?;
-
-                        StrongEquivalenceTask {
-                            left: left.clone().into(),
-                            right: right.clone().into(),
-                            decomposition,
-                            direction,
-                            simplify: !no_simplify,
-                            break_equivalences: !no_eq_break,
+                        Either::Right(specification) => {
+                            Either::Right(fol::Specification::from_file(specification)?)
                         }
-                        .decompose()?
-                        .report_warnings()
-                    }
-                },
-
-                Equivalence::External => match dialect {
-                    Dialect::MiniGringoCL => ExternalEquivalenceTask {
-                        specification: match files
-                            .specification()
-                            .ok_or(anyhow!("no specification was provided"))?
-                        {
-                            Either::Left(program) => {
-                                Either::Left(asp::mini_gringo_cl::Program::from_file(program)?)
-                            }
-                            Either::Right(specification) => {
-                                Either::Right(fol::Specification::from_file(specification)?)
-                            }
-                        },
-                        program: asp::mini_gringo_cl::Program::from_file(
-                            files.program().ok_or(anyhow!("no program was provided"))?,
-                        )?,
-                        user_guide: fol::UserGuide::from_file(
-                            files
-                                .user_guide()
-                                .ok_or(anyhow!("no user guide was provided"))?,
-                        )?,
-                        proof_outline: files
-                            .proof_outline()
-                            .map(fol::Specification::from_file)
-                            .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
-                        decomposition,
-                        direction,
-                        formula_representation,
-                        bypass_tightness,
-                        simplify: !no_simplify,
-                        break_equivalences: !no_eq_break,
-                    }
-                    .decompose()?
-                    .report_warnings(),
-
-                    Dialect::MiniGringo => {
-                        let specification = match files
-                            .specification()
-                            .ok_or(anyhow!("no specification was provided"))?
-                        {
-                            Either::Left(program) => {
-                                let program = asp::mini_gringo::Program::from_file(program)?;
-                                Either::Left(program.into())
-                            }
-                            Either::Right(specification) => {
-                                Either::Right(fol::Specification::from_file(specification)?)
-                            }
-                        };
-
-                        let program = asp::mini_gringo::Program::from_file(
-                            files.program().ok_or(anyhow!("no program was provided"))?,
-                        )?;
-
-                        ExternalEquivalenceTask {
-                            specification,
-                            program: program.into(),
-                            user_guide: fol::UserGuide::from_file(
-                                files
-                                    .user_guide()
-                                    .ok_or(anyhow!("no user guide was provided"))?,
-                            )?,
-                            proof_outline: files
-                                .proof_outline()
-                                .map(fol::Specification::from_file)
-                                .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
-                            decomposition,
-                            direction,
-                            formula_representation,
-                            bypass_tightness,
-                            simplify: !no_simplify,
-                            break_equivalences: !no_eq_break,
-                        }
-                        .decompose()?
-                        .report_warnings()
-                    }
-                },
+                    },
+                    program: asp::mini_gringo_cl::Program::from_file(
+                        files.program().ok_or(anyhow!("no program was provided"))?,
+                    )?,
+                    user_guide: fol::UserGuide::from_file(
+                        files
+                            .user_guide()
+                            .ok_or(anyhow!("no user guide was provided"))?,
+                    )?,
+                    proof_outline: files
+                        .proof_outline()
+                        .map(fol::Specification::from_file)
+                        .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                    decomposition,
+                    direction,
+                    formula_representation,
+                    bypass_tightness,
+                    simplify: !no_simplify,
+                    break_equivalences: !no_eq_break,
+                }
+                .decompose()?
+                .report_warnings(),
             };
 
             if let Some(out_dir) = out_dir {
@@ -543,7 +468,7 @@ pub fn main() -> Result<()> {
                 Some(path) => {
                     match fol::Theory::from_file(&path) {
                         Ok(theory) => Ok(Either::Left(theory)),
-                        Err(_) => match get_program_of_unknown_dialect(Some(path)) {
+                        Err(_) => match get_program_of_unknown_fragment(Some(path)) {
                             Ok(program) => Ok(Either::Right(program)),
                             Err(e) => Err(e),
                         },
