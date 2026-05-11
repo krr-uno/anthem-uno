@@ -26,9 +26,8 @@ use {
             problem::Interpretation,
             prover::{Prover, Report, Status, Success, vampire::Vampire},
             task::{
-                Task,
-                external_equivalence::ExternalEquivalenceTask,
-                strong_equivalence::{StrongEquivalenceCounterModelTask, StrongEquivalenceTask},
+                Task, external_equivalence::ExternalEquivalenceTask,
+                strong_equivalence::StrongEquivalenceTask,
             },
         },
     },
@@ -63,29 +62,6 @@ fn get_program_of_unknown_dialect(input: Option<PathBuf>) -> Result<Program> {
             Err(e) => Err(e.into()),
         },
     }
-}
-
-fn convert_to_smt2(path: PathBuf) -> Result<()> {
-    let fname = path.display().to_string();
-
-    let child = process::Command::new("./cvc5-tptp-to-smt2")
-        .args([
-            "-o",
-            "raw-benchmark",
-            "--parse-only",
-            "--lang=tptp",
-            "--output-lang=smt2",
-            &fname,
-        ])
-        .stdout(process::Stdio::piped())
-        .stderr(process::Stdio::piped())
-        .spawn()?;
-
-    let output = child.wait_with_output()?;
-
-    fs::write(path.with_extension("smt2"), output.stdout).expect("Unable to write file");
-
-    Ok(())
 }
 
 pub fn main() -> Result<()> {
@@ -328,14 +304,13 @@ pub fn main() -> Result<()> {
             dialect,
             formula_representation,
             backend,
-            countermodel,
         } => {
             let start_time = Instant::now();
 
             let files =
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
-            let (problems, countermodel_task) = match equivalence {
+            let problems = match equivalence {
                 Equivalence::Strong => match dialect {
                     Dialect::MiniGringoCL => {
                         let left = asp::mini_gringo_cl::Program::from_file(
@@ -349,23 +324,16 @@ pub fn main() -> Result<()> {
                                 .ok_or(anyhow!("no right program was provided"))?,
                         )?;
 
-                        (
-                            StrongEquivalenceTask {
-                                left: left.clone(),
-                                right: right.clone(),
-                                decomposition,
-                                direction,
-                                simplify: !no_simplify,
-                                break_equivalences: !no_eq_break,
-                            }
-                            .decompose()?
-                            .report_warnings(),
-                            Some(StrongEquivalenceCounterModelTask {
-                                left,
-                                right,
-                                simplify: !no_simplify,
-                            }),
-                        )
+                        StrongEquivalenceTask {
+                            left: left.clone(),
+                            right: right.clone(),
+                            decomposition,
+                            direction,
+                            simplify: !no_simplify,
+                            break_equivalences: !no_eq_break,
+                        }
+                        .decompose()?
+                        .report_warnings()
                     }
 
                     Dialect::MiniGringo => {
@@ -380,63 +348,53 @@ pub fn main() -> Result<()> {
                                 .ok_or(anyhow!("no right program was provided"))?,
                         )?;
 
-                        (
-                            StrongEquivalenceTask {
-                                left: left.clone().into(),
-                                right: right.clone().into(),
-                                decomposition,
-                                direction,
-                                simplify: !no_simplify,
-                                break_equivalences: !no_eq_break,
-                            }
-                            .decompose()?
-                            .report_warnings(),
-                            Some(StrongEquivalenceCounterModelTask {
-                                left: left.into(),
-                                right: right.into(),
-                                simplify: !no_simplify,
-                            }),
-                        )
-                    }
-                },
-
-                Equivalence::External => match dialect {
-                    Dialect::MiniGringoCL => (
-                        ExternalEquivalenceTask {
-                            specification: match files
-                                .specification()
-                                .ok_or(anyhow!("no specification was provided"))?
-                            {
-                                Either::Left(program) => {
-                                    Either::Left(asp::mini_gringo_cl::Program::from_file(program)?)
-                                }
-                                Either::Right(specification) => {
-                                    Either::Right(fol::Specification::from_file(specification)?)
-                                }
-                            },
-                            program: asp::mini_gringo_cl::Program::from_file(
-                                files.program().ok_or(anyhow!("no program was provided"))?,
-                            )?,
-                            user_guide: fol::UserGuide::from_file(
-                                files
-                                    .user_guide()
-                                    .ok_or(anyhow!("no user guide was provided"))?,
-                            )?,
-                            proof_outline: files
-                                .proof_outline()
-                                .map(fol::Specification::from_file)
-                                .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                        StrongEquivalenceTask {
+                            left: left.clone().into(),
+                            right: right.clone().into(),
                             decomposition,
                             direction,
-                            formula_representation,
-                            bypass_tightness,
                             simplify: !no_simplify,
                             break_equivalences: !no_eq_break,
                         }
                         .decompose()?
-                        .report_warnings(),
-                        None,
-                    ),
+                        .report_warnings()
+                    }
+                },
+
+                Equivalence::External => match dialect {
+                    Dialect::MiniGringoCL => ExternalEquivalenceTask {
+                        specification: match files
+                            .specification()
+                            .ok_or(anyhow!("no specification was provided"))?
+                        {
+                            Either::Left(program) => {
+                                Either::Left(asp::mini_gringo_cl::Program::from_file(program)?)
+                            }
+                            Either::Right(specification) => {
+                                Either::Right(fol::Specification::from_file(specification)?)
+                            }
+                        },
+                        program: asp::mini_gringo_cl::Program::from_file(
+                            files.program().ok_or(anyhow!("no program was provided"))?,
+                        )?,
+                        user_guide: fol::UserGuide::from_file(
+                            files
+                                .user_guide()
+                                .ok_or(anyhow!("no user guide was provided"))?,
+                        )?,
+                        proof_outline: files
+                            .proof_outline()
+                            .map(fol::Specification::from_file)
+                            .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                        decomposition,
+                        direction,
+                        formula_representation,
+                        bypass_tightness,
+                        simplify: !no_simplify,
+                        break_equivalences: !no_eq_break,
+                    }
+                    .decompose()?
+                    .report_warnings(),
 
                     Dialect::MiniGringo => {
                         let specification = match files
@@ -456,30 +414,27 @@ pub fn main() -> Result<()> {
                             files.program().ok_or(anyhow!("no program was provided"))?,
                         )?;
 
-                        (
-                            ExternalEquivalenceTask {
-                                specification,
-                                program: program.into(),
-                                user_guide: fol::UserGuide::from_file(
-                                    files
-                                        .user_guide()
-                                        .ok_or(anyhow!("no user guide was provided"))?,
-                                )?,
-                                proof_outline: files
-                                    .proof_outline()
-                                    .map(fol::Specification::from_file)
-                                    .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
-                                decomposition,
-                                direction,
-                                formula_representation,
-                                bypass_tightness,
-                                simplify: !no_simplify,
-                                break_equivalences: !no_eq_break,
-                            }
-                            .decompose()?
-                            .report_warnings(),
-                            None,
-                        )
+                        ExternalEquivalenceTask {
+                            specification,
+                            program: program.into(),
+                            user_guide: fol::UserGuide::from_file(
+                                files
+                                    .user_guide()
+                                    .ok_or(anyhow!("no user guide was provided"))?,
+                            )?,
+                            proof_outline: files
+                                .proof_outline()
+                                .map(fol::Specification::from_file)
+                                .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                            decomposition,
+                            direction,
+                            formula_representation,
+                            bypass_tightness,
+                            simplify: !no_simplify,
+                            break_equivalences: !no_eq_break,
+                        }
+                        .decompose()?
+                        .report_warnings()
                     }
                 },
             };
@@ -497,23 +452,6 @@ pub fn main() -> Result<()> {
                     let mut problem = problem.clone();
                     problem.preamble = Some(PathBuf::from("standard_preamble.p"));
                     problem.to_file(path)?;
-                }
-
-                // emit countermodel task
-                if countermodel {
-                    if let Some(task) = countermodel_task {
-                        let countermodel_problems = task.decompose()?.report_warnings();
-                        assert_eq!(
-                            countermodel_problems.len(),
-                            1,
-                            "countermodel task should only have one problem file"
-                        );
-                        let counter_problem = countermodel_problems[0].clone();
-                        let mut path = out_dir.clone();
-                        path.push(format!("{}.p", counter_problem.name));
-                        counter_problem.to_file(path.clone())?;
-                        convert_to_smt2(path)?;
-                    }
                 }
             }
 
