@@ -439,7 +439,7 @@ impl Task for ExternalEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         self.ensure_valid_formula_representation()?;
 
-        let placeholders = self
+        let placeholders: IndexMap<String, fol::FunctionConstant> = self
             .user_guide
             .placeholders()
             .into_iter()
@@ -527,24 +527,42 @@ impl Task for ExternalEquivalenceTask {
             }
         }
 
-        let theory_translate = |program: asp::Program| {
+        let placeholders_copy = placeholders.clone();
+        let ug_input_predicates = self.user_guide.input_predicates();
+
+        let unboxed_theory_translate = move |program: asp::Program| {
             // TODO: allow more formula representations beyond tau-star
-            let mut theory = program
-                .tau_star()
-                .replace_placeholders(&placeholders)
-                .completion(self.user_guide.input_predicates())
+            // let mut theory = program
+            //     .tau_star()
+            //     .replace_placeholders(&placeholders_copy)
+            //     .completion(ug_input_predicates)
+            //     .expect("tau_star did not create a completable theory");
+
+            //let mut theory = fol::Theory { formulas: vec![] };
+
+            let tau: Box<fol::Theory> =
+                Box::new(program.tau_star().replace_placeholders(&placeholders_copy));
+
+            let mut theory = (*tau)
+                .completion(ug_input_predicates)
                 .expect("tau_star did not create a completable theory");
 
-            if self.simplify {
-                let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
-                theory = theory
-                    .into_iter()
-                    .map(|f| f.apply_fixpoint(&mut portfolio))
-                    .collect();
-            }
+            //let theory = program.tau_star().completion(ug_input_predicates).expect("tau_star did not create a completable theory");
+
+            // if self.simplify {
+            //     let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
+            //     theory = theory
+            //         .into_iter()
+            //         .map(|f| f.apply_fixpoint(&mut portfolio))
+            //         .collect();
+            // }
 
             theory
         };
+
+        // Heap-allocate the closure to accommodate large theories
+        let theory_translate: Box<dyn FnOnce(asp::Program) -> fol::Theory> =
+            Box::new(unboxed_theory_translate);
 
         let control_translate = |theory: fol::Theory| {
             let mut constraint_counter = 0..;
@@ -576,11 +594,19 @@ impl Task for ExternalEquivalenceTask {
         };
 
         let left = match self.specification {
-            Either::Left(program) => control_translate(theory_translate(program)),
+            Either::Left(program) => todo!(), //control_translate(theory_translate(program)),
             Either::Right(specification) => specification.replace_placeholders(&placeholders),
         };
 
-        let right = control_translate(theory_translate(self.program));
+        println!("hello there");
+
+        let theory_theory_theory = theory_translate(self.program);
+
+        println!("you are a bold one kenobi");
+
+        let right = control_translate(theory_theory_theory);
+
+        println!("deep");
 
         // TODO: Warn when a conflict between private predicates is encountered
         // TODO: Check if renaming creates new conflicts
@@ -590,6 +616,8 @@ impl Task for ExternalEquivalenceTask {
                 .map(|p| (p.clone(), "p".to_string()))
                 .collect(),
         );
+
+        println!("deeper");
 
         let mut user_guide_assumptions = Vec::new();
         for formula in self.user_guide.formulas() {
@@ -616,6 +644,8 @@ impl Task for ExternalEquivalenceTask {
             }
         }
 
+        println!("deepest");
+
         let mut taken_predicates = self.user_guide.input_predicates();
         for anf in left.formulas.iter() {
             taken_predicates.extend(anf.formula.predicates());
@@ -632,6 +662,8 @@ impl Task for ExternalEquivalenceTask {
                 .into_iter()
                 .map(ExternalEquivalenceTaskWarning::from),
         );
+
+        println!("deep thoughts with the deep");
 
         Ok(ValidatedExternalEquivalenceTask {
             left: left.formulas,

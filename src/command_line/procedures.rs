@@ -27,7 +27,7 @@ use {
     clap::Parser as _,
     either::Either,
     indexmap::IndexSet,
-    std::time::Instant,
+    std::{thread, time::Instant},
 };
 
 pub fn main() -> Result<()> {
@@ -192,26 +192,8 @@ pub fn main() -> Result<()> {
             let files =
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
-            let problems = match equivalence {
-                Equivalence::Strong => StrongEquivalenceTask {
-                    left: asp::Program::from_file(
-                        files
-                            .left()
-                            .ok_or(anyhow!("no left program was provided"))?,
-                    )?,
-                    right: asp::Program::from_file(
-                        files
-                            .right()
-                            .ok_or(anyhow!("no right program was provided"))?,
-                    )?,
-                    decomposition,
-                    formula_representation,
-                    direction,
-                    simplify: !no_simplify,
-                    break_equivalences: !no_eq_break,
-                }
-                .decompose()?
-                .report_warnings(),
+            let temps = match equivalence {
+                Equivalence::Strong => todo!(),
 
                 Equivalence::External => ExternalEquivalenceTask {
                     specification: match files
@@ -241,18 +223,45 @@ pub fn main() -> Result<()> {
                     bypass_tightness,
                     simplify: !no_simplify,
                     break_equivalences: !no_eq_break,
-                }
-                .decompose()?
-                .report_warnings(),
+                },
             };
 
-            if let Some(out_dir) = out_dir {
-                for problem in &problems {
-                    let mut path = out_dir.clone();
-                    path.push(format!("{}.p", problem.name));
-                    problem.to_file(path)?;
+            let stack_size = 240 * 1024 * 1024; // 4MB
+            let builder = thread::Builder::new().stack_size(stack_size);
+            let handler = builder.spawn(|| temps.decompose().unwrap().report_warnings());
+
+            let problems = match handler {
+                Ok(handle) => match handle.join() {
+                    Ok(problems) => problems,
+                    Err(_) => todo!(),
+                },
+
+                Err(_) => todo!(),
+            };
+
+            println!("no problem");
+
+            //let problems: Vec<crate::verifying::problem::Problem> = vec![];
+
+            let new_builder = thread::Builder::new().stack_size(stack_size);
+            let new_handler = new_builder.spawn(move || {
+                if let Some(out_dir) = out_dir {
+                    println!("pirates");
+                    for problem in &problems {
+                        let mut path = out_dir.clone();
+                        path.push(format!("{}.p", problem.name));
+                        problem.to_file(path).unwrap();
+                    }
+                    println!("more pirates");
                 }
+            });
+
+            match new_handler {
+                Ok(handle) => handle.join().unwrap(),
+                Err(_) => todo!(),
             }
+
+            let problems: Vec<crate::verifying::problem::Problem> = vec![];
 
             if !no_proof_search {
                 let prover = Vampire {
