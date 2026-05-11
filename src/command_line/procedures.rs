@@ -310,24 +310,32 @@ pub fn main() -> Result<()> {
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
             let problems = match equivalence {
-                Equivalence::Strong => StrongEquivalenceTask {
-                    left: asp::mini_gringo_cl::Program::from_file(
-                        files
-                            .left()
-                            .ok_or(anyhow!("no left program was provided"))?,
-                    )?,
-                    right: asp::mini_gringo_cl::Program::from_file(
-                        files
-                            .right()
-                            .ok_or(anyhow!("no right program was provided"))?,
-                    )?,
-                    decomposition,
-                    direction,
-                    simplify: !no_simplify,
-                    break_equivalences: !no_eq_break,
+                Equivalence::Strong => {
+                    let user_guide = match files.user_guide() {
+                        Some(path) => Some(fol::UserGuide::from_file(path)?),
+                        None => None,
+                    };
+
+                    StrongEquivalenceTask {
+                        left: asp::mini_gringo_cl::Program::from_file(
+                            files
+                                .left()
+                                .ok_or(anyhow!("no left program was provided"))?,
+                        )?,
+                        right: asp::mini_gringo_cl::Program::from_file(
+                            files
+                                .right()
+                                .ok_or(anyhow!("no right program was provided"))?,
+                        )?,
+                        user_guide,
+                        decomposition,
+                        direction,
+                        simplify: !no_simplify,
+                        break_equivalences: !no_eq_break,
+                    }
+                    .decompose()?
+                    .report_warnings()
                 }
-                .decompose()?
-                .report_warnings(),
 
                 Equivalence::External => ExternalEquivalenceTask {
                     specification: match files

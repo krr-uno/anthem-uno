@@ -1,0 +1,2 @@
+input: b -> integer.
+assumption: forall N$ ( (-N$)*(-N$) = N$*N$ ).
