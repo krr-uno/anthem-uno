@@ -1,12 +1,48 @@
 use crate::{
     convenience::apply::Apply as _,
     syntax_tree::fol::sigma_0::{
-        AtomicFormula, BinaryConnective, Formula, Theory, UnaryConnective,
+        self as fol, AtomicFormula, BinaryConnective, Formula, Theory, UnaryConnective,
     },
+    verifying::outline::GeneralLemma,
+    verifying::problem,
 };
 
 pub trait Gamma {
     fn gamma(self) -> Self;
+}
+
+impl Gamma for GeneralLemma {
+    fn gamma(self) -> Self {
+        let conjectures = self.conjectures.into_iter().map(Gamma::gamma).collect();
+
+        let consequences = self.consequences.into_iter().map(Gamma::gamma).collect();
+
+        GeneralLemma {
+            conjectures,
+            consequences,
+        }
+    }
+}
+
+impl Gamma for problem::AnnotatedFormula {
+    fn gamma(self) -> Self {
+        problem::AnnotatedFormula {
+            name: self.name,
+            role: self.role,
+            formula: self.formula.gamma(),
+        }
+    }
+}
+
+impl Gamma for fol::AnnotatedFormula {
+    fn gamma(self) -> Self {
+        fol::AnnotatedFormula {
+            role: self.role,
+            direction: self.direction,
+            name: self.name,
+            formula: self.formula.gamma(),
+        }
+    }
 }
 
 impl Gamma for Theory {

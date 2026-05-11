@@ -328,6 +328,10 @@ pub fn main() -> Result<()> {
                                 .ok_or(anyhow!("no right program was provided"))?,
                         )?,
                         user_guide,
+                        proof_outline: files
+                            .proof_outline()
+                            .map(fol::Specification::from_file)
+                            .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
                         decomposition,
                         direction,
                         simplify: !no_simplify,
