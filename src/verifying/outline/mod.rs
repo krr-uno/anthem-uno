@@ -5,6 +5,7 @@ use {
             with_warnings::{Result, WithWarnings},
         },
         syntax_tree::fol::sigma_0 as fol,
+        translating::classical_reduction::gamma::Gamma,
         verifying::problem,
     },
     indexmap::{IndexMap, IndexSet},
@@ -415,6 +416,28 @@ impl ProofOutline {
             backward_definitions,
         })
         .preface_warnings(warnings))
+    }
+
+    pub fn apply_gamma_reduction(self) -> Self {
+        let forward_lemmas = self.forward_lemmas.into_iter().map(Gamma::gamma).collect();
+        let backward_lemmas = self.backward_lemmas.into_iter().map(Gamma::gamma).collect();
+        // let forward_definitions = self
+        //     .forward_definitions
+        //     .into_iter()
+        //     .map(|d| d.apply_gamma_reduction())
+        //     .collect();
+        // let backward_definitions = self
+        //     .backward_definitions
+        //     .into_iter()
+        //     .map(|d| d.apply_gamma_reduction())
+        //     .collect();
+
+        ProofOutline {
+            forward_lemmas,
+            backward_lemmas,
+            forward_definitions: self.forward_definitions,
+            backward_definitions: self.backward_definitions,
+        }
     }
 }
 

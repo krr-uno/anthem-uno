@@ -18,9 +18,9 @@ pub enum Command {
         #[arg(long, value_enum)]
         property: Property,
 
-        /// The ASP dialect of the input
+        /// The language fragment of Abstract Gringo in which the input is written
         #[arg(long, value_enum, default_value_t)]
-        dialect: Dialect,
+        fragment: Fragment,
 
         /// The file to analyze
         input: Option<PathBuf>,
@@ -82,10 +82,6 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         decomposition: Decomposition,
 
-        /// The ASP dialect of the input
-        #[arg(long, value_enum, default_value_t)]
-        dialect: Dialect,
-
         /// The translation used to obtain the program's formula representation
         #[arg(long, value_enum, default_value_t)]
         formula_representation: FormulaRepresentation,
@@ -121,10 +117,6 @@ pub enum Command {
         /// Omit display of system runtimes
         #[arg(long, action)]
         no_timing: bool,
-
-        /// Generate a countermodel file
-        #[arg(long, action)]
-        countermodel: bool,
 
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
@@ -167,7 +159,7 @@ pub enum Command {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum Dialect {
+pub enum Fragment {
     MiniGringo,
     #[default]
     MiniGringoCL,
