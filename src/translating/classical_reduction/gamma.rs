@@ -24,23 +24,33 @@ impl Gamma for GeneralLemma {
     }
 }
 
+/// Gamma only modifies formulas which contain non-arithmetic predicates
 impl Gamma for problem::AnnotatedFormula {
     fn gamma(self) -> Self {
         problem::AnnotatedFormula {
             name: self.name,
             role: self.role,
-            formula: self.formula.gamma(),
+            formula: if self.formula.predicates().is_empty() {
+                self.formula
+            } else {
+                self.formula.gamma()
+            },
         }
     }
 }
 
+/// Gamma only modifies formulas which contain non-arithmetic predicates
 impl Gamma for fol::AnnotatedFormula {
     fn gamma(self) -> Self {
         fol::AnnotatedFormula {
             role: self.role,
             direction: self.direction,
             name: self.name,
-            formula: self.formula.gamma(),
+            formula: if self.formula.predicates().is_empty() {
+                self.formula
+            } else {
+                self.formula.gamma()
+            },
         }
     }
 }
