@@ -8,9 +8,9 @@ use {
         syntax_tree::{
             asp::mini_gringo_cl as asp,
             fol::sigma_0::{
-                Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula,
-                GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation, Sort,
-                SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
+                Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Dialect,
+                Formula, GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation,
+                Sort, SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
             },
         },
     },
@@ -1122,7 +1122,7 @@ fn tau_star(p: asp::Program) -> Theory {
 impl TauStar for asp::Program {
     type Output = Theory;
 
-    fn tau_star(self) -> Self::Output {
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
         tau_star(self)
     }
 }

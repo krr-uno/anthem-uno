@@ -741,7 +741,7 @@ impl Task for ExternalEquivalenceTask {
                     ),
                 },
                 FormulaRepresentation::TauStar => Ok(program
-                    .tau_star()
+                    .tau_star(fol::Dialect::GringoFive)
                     .replace_placeholders(&placeholders)
                     .completion(self.user_guide.input_predicates())
                     .expect("tau_star did not create a completable theory")),

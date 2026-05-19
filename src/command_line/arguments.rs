@@ -1,4 +1,5 @@
 use {
+    crate::syntax_tree::fol::sigma_0 as fol,
     clap::{Parser, Subcommand, ValueEnum},
     std::path::PathBuf,
 };
@@ -67,6 +68,10 @@ pub enum Command {
         // Display formulas as LaTex
         #[arg(long, action)]
         display_latex: bool,
+
+        /// The dialect governs which tau-star variant is applied in translation
+        #[arg(long, value_enum)]
+        dialect: Dialect,
 
         /// The file to translate
         input: Option<PathBuf>,
@@ -173,12 +178,12 @@ pub enum Fragment {
     MiniGringoCL,
 }
 
-// #[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-// pub enum Dialect {
-//     #[default]
-//     GringoFive,
-//     GringoSix,
-// }
+#[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Dialect {
+    #[default]
+    GringoFive,
+    GringoSix,
+}
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Backend {

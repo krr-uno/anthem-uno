@@ -1,5 +1,6 @@
 use {
     crate::{
+        command_line::arguments,
         convenience::{apply::Apply as _, variable_selection::VariableSelection},
         formatting::fol::sigma_0::default::Format,
         parsing::fol::sigma_0::pest::{
@@ -1161,6 +1162,15 @@ impl_node!(PlaceholderDeclaration, Format, PlaceholderDeclarationParser);
 pub enum Dialect {
     GringoFive,
     GringoSix,
+}
+
+impl From<arguments::Dialect> for Dialect {
+    fn from(value: arguments::Dialect) -> Self {
+        match value {
+            arguments::Dialect::GringoFive => Dialect::GringoFive,
+            arguments::Dialect::GringoSix => Dialect::GringoSix,
+        }
+    }
 }
 
 impl_node!(Dialect, Format, DialectParser);

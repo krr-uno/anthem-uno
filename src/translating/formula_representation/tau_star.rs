@@ -1,7 +1,10 @@
 use {
     crate::{
         convenience::variable_selection::VariableSelection,
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            asp::mini_gringo as asp,
+            fol::sigma_0::{self as fol, Dialect},
+        },
     },
     indexmap::IndexSet,
 };
@@ -841,13 +844,13 @@ fn tau_star(p: asp::Program) -> fol::Theory {
 pub trait TauStar {
     type Output;
 
-    fn tau_star(self) -> Self::Output;
+    fn tau_star(self, dialect: Dialect) -> Self::Output;
 }
 
 impl TauStar for asp::Program {
     type Output = fol::Theory;
 
-    fn tau_star(self) -> Self::Output {
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
         tau_star(self)
     }
 }
