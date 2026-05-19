@@ -2,7 +2,7 @@ use crate::{
     parsing::PestParser,
     syntax_tree::fol::sigma_0::{
         AnnotatedFormula, Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison,
-        Direction, Formula, FunctionConstant, GeneralTerm, Guard, IntegerTerm,
+        Dialect, Direction, Formula, FunctionConstant, GeneralTerm, Guard, IntegerTerm,
         PlaceholderDeclaration, Predicate, Quantification, Quantifier, Relation, Role, Sort,
         Specification, SymbolicTerm, Theory, UnaryConnective, UnaryOperator, UserGuide,
         UserGuideEntry, Variable,
@@ -765,6 +765,25 @@ impl PestParser for PlaceholderDeclarationParser {
     }
 }
 
+pub struct DialectParser;
+
+impl PestParser for DialectParser {
+    type Node = Dialect;
+
+    type InternalParser = internal::Parser;
+    type Rule = internal::Rule;
+    const RULE: internal::Rule = internal::Rule::dialect_eoi;
+
+    fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
+        match pair.as_rule() {
+            internal::Rule::dialect => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::gringo_five => Dialect::GringoFive,
+            internal::Rule::gringo_six => Dialect::GringoSix,
+            _ => Self::report_unexpected_pair(pair),
+        }
+    }
+}
+
 pub struct UserGuideEntryParser;
 
 impl PestParser for UserGuideEntryParser {
@@ -777,6 +796,12 @@ impl PestParser for UserGuideEntryParser {
     fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
         match pair.as_rule() {
             internal::Rule::user_guide_entry => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::program_dialect => {
+                UserGuideEntry::ProgramDialect(DialectParser::translate_pairs(pair.into_inner()))
+            }
+            internal::Rule::specification_dialect => UserGuideEntry::SpecificationDialect(
+                DialectParser::translate_pairs(pair.into_inner()),
+            ),
             internal::Rule::input_predicate => {
                 UserGuideEntry::InputPredicate(PredicateParser::translate_pairs(pair.into_inner()))
             }

@@ -130,8 +130,15 @@ annotated_formula_eoi = _{ annotated_formula ~ EOI }
 specification = { &ANY? ~ (annotated_formula ~ ".")* }
 specification_eoi = _{ specification ~ EOI }
 
-user_guide_entry = { input_predicate | output_predicate | placeholder_declaration | annotated_formula }
+dialect = { gringo_five | gringo_six }
+dialect_eoi = _{ dialect ~ EOI }
+    gringo_five = { "gringo-five" }
+    gringo_six  = { "gringo-six" }
+
+user_guide_entry = { program_dialect | specification_dialect | input_predicate | output_predicate | placeholder_declaration | annotated_formula }
 user_guide_entry_eoi = _{ user_guide_entry ~ EOI }
+    program_dialect         = { "program-dialect" ~ ":" ~ dialect }
+    specification_dialect   = { "specification-dialect" ~ ":" ~ dialect }
     input_predicate         = { "input" ~ ":" ~ predicate}
     output_predicate        = { "output" ~ ":" ~ predicate}
     placeholder_declaration = { "input" ~ ":" ~ symbolic_constant ~ ("->" ~ sort)? }

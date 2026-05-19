@@ -5,10 +5,10 @@ use {
             Node,
             fol::sigma_0::{
                 AnnotatedFormula, Atom, AtomicFormula, BinaryConnective, BinaryOperator,
-                Comparison, Direction, Formula, FunctionConstant, GeneralTerm, Guard, IntegerTerm,
-                PlaceholderDeclaration, Predicate, Quantification, Quantifier, Relation, Role,
-                Sort, Specification, SymbolicTerm, Theory, UnaryConnective, UnaryOperator,
-                UserGuide, UserGuideEntry, Variable,
+                Comparison, Dialect, Direction, Formula, FunctionConstant, GeneralTerm, Guard,
+                IntegerTerm, PlaceholderDeclaration, Predicate, Quantification, Quantifier,
+                Relation, Role, Sort, Specification, SymbolicTerm, Theory, UnaryConnective,
+                UnaryOperator, UserGuide, UserGuideEntry, Variable,
             },
         },
     },
@@ -422,6 +422,15 @@ impl Display for Format<'_, PlaceholderDeclaration> {
     }
 }
 
+impl Display for Format<'_, Dialect> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Dialect::GringoFive => write!(f, "gringo-five"),
+            Dialect::GringoSix => write!(f, "gringo-six"),
+        }
+    }
+}
+
 impl Display for Format<'_, UserGuideEntry> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
@@ -429,6 +438,10 @@ impl Display for Format<'_, UserGuideEntry> {
             UserGuideEntry::OutputPredicate(p) => write!(f, "output: {}", Format(p)),
             UserGuideEntry::PlaceholderDeclaration(c) => write!(f, "input: {}", Format(c)),
             UserGuideEntry::AnnotatedFormula(g) => Format(g).fmt(f),
+            UserGuideEntry::ProgramDialect(d) => write!(f, "program-dialect: {}", Format(d)),
+            UserGuideEntry::SpecificationDialect(d) => {
+                write!(f, "specification-dialect: {}", Format(d))
+            }
         }
     }
 }
