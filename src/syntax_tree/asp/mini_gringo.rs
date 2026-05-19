@@ -86,9 +86,7 @@ pub enum BinaryOperator {
     Subtract,
     Multiply,
     Divide,
-    DivideInteger,
     Modulo,
-    ModuloInteger,
     Interval,
 }
 
@@ -101,9 +99,7 @@ impl From<asp::mini_gringo_cl::BinaryOperator> for BinaryOperator {
             mini_gringo_cl::BinaryOperator::Subtract => BinaryOperator::Subtract,
             mini_gringo_cl::BinaryOperator::Multiply => BinaryOperator::Multiply,
             mini_gringo_cl::BinaryOperator::Divide => BinaryOperator::Divide,
-            mini_gringo_cl::BinaryOperator::DivideInteger => BinaryOperator::DivideInteger,
             mini_gringo_cl::BinaryOperator::Modulo => BinaryOperator::Modulo,
-            mini_gringo_cl::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
             mini_gringo_cl::BinaryOperator::Interval => BinaryOperator::Interval,
         }
     }
