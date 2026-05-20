@@ -7,7 +7,7 @@ use {
         command_line::{
             Program,
             arguments::{
-                Arguments, Command, Dialect, Equivalence, Output, ParseAs, Property,
+                Arguments, Command, Equivalence, Fragment, Output, ParseAs, Property,
                 SimplificationPortfolio, SimplificationStrategy, Translation, Visualization,
             },
             files::Files,
@@ -93,11 +93,11 @@ pub fn main() -> Result<()> {
         Command::Analyze {
             property,
             input,
-            dialect,
+            fragment,
         } => {
             match property {
-                Property::Regularity => match dialect {
-                    Dialect::MiniGringo => {
+                Property::Regularity => match fragment {
+                    Fragment::MiniGringo => {
                         let program = input.map_or_else(
                             asp::mini_gringo::Program::from_stdin,
                             asp::mini_gringo::Program::from_file,
@@ -105,13 +105,13 @@ pub fn main() -> Result<()> {
                         let is_regular = program.is_regular();
                         println!("{is_regular}");
                     }
-                    Dialect::MiniGringoCL => {
+                    Fragment::MiniGringoCL => {
                         println!("operation unsupported for mg-cl programs");
                     }
                 },
 
-                Property::Tightness => match dialect {
-                    Dialect::MiniGringo => {
+                Property::Tightness => match fragment {
+                    Fragment::MiniGringo => {
                         let program = input.map_or_else(
                             asp::mini_gringo::Program::from_stdin,
                             asp::mini_gringo::Program::from_file,
@@ -121,14 +121,16 @@ pub fn main() -> Result<()> {
                         let is_tight = program.is_tight(intensional_predicates);
                         println!("{is_tight}");
                     }
-                    Dialect::MiniGringoCL => {
+                    Fragment::MiniGringoCL => {
                         let program = input.map_or_else(
                             asp::mini_gringo_cl::Program::from_stdin,
                             asp::mini_gringo_cl::Program::from_file,
                         )?;
                         let intensional_predicates =
                             program.predicates().into_iter().map(|p| p.into()).collect();
-                        let is_tight = program.tau_star().is_tight(intensional_predicates);
+                        let is_tight = program
+                            .tau_star(fol::Dialect::GringoFive)
+                            .is_tight(intensional_predicates);
                         println!("{is_tight}");
                     }
                 },
@@ -246,6 +248,7 @@ pub fn main() -> Result<()> {
             with,
             input,
             display_latex,
+            dialect,
         } => {
             let theory = match with {
                 Translation::Completion => {
@@ -253,14 +256,14 @@ pub fn main() -> Result<()> {
                         Some(path) => match fol::Theory::from_file(&path) {
                             Ok(theory) => Ok(theory),
                             Err(_) => match asp::mini_gringo::Program::from_file(path) {
-                                Ok(program) => Ok(program.tau_star()),
+                                Ok(program) => Ok(program.tau_star(dialect.into())),
                                 Err(e) => Err(e),
                             },
                         },
                         None => match fol::Theory::from_stdin() {
                             Ok(theory) => Ok(theory),
                             Err(_) => match asp::mini_gringo::Program::from_stdin() {
-                                Ok(program) => Ok(program.tau_star()),
+                                Ok(program) => Ok(program.tau_star(dialect.into())),
                                 Err(e) => Err(e),
                             },
                         },
@@ -297,7 +300,7 @@ pub fn main() -> Result<()> {
 
                 Translation::TauStar => {
                     let program = get_program_of_unknown_dialect(input)?;
-                    program.tau_star()
+                    program.tau_star(dialect.into())
                 }
             };
 
@@ -325,7 +328,7 @@ pub fn main() -> Result<()> {
             prover_cores,
             save_problems: out_dir,
             files,
-            dialect,
+            fragment,
             formula_representation,
             backend,
             countermodel,
@@ -336,8 +339,8 @@ pub fn main() -> Result<()> {
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
             let (problems, countermodel_task) = match equivalence {
-                Equivalence::Strong => match dialect {
-                    Dialect::MiniGringoCL => {
+                Equivalence::Strong => match fragment {
+                    Fragment::MiniGringoCL => {
                         let left = asp::mini_gringo_cl::Program::from_file(
                             files
                                 .left()
@@ -368,7 +371,7 @@ pub fn main() -> Result<()> {
                         )
                     }
 
-                    Dialect::MiniGringo => {
+                    Fragment::MiniGringo => {
                         let left = asp::mini_gringo::Program::from_file(
                             files
                                 .left()
@@ -400,8 +403,8 @@ pub fn main() -> Result<()> {
                     }
                 },
 
-                Equivalence::External => match dialect {
-                    Dialect::MiniGringoCL => (
+                Equivalence::External => match fragment {
+                    Fragment::MiniGringoCL => (
                         ExternalEquivalenceTask {
                             specification: match files
                                 .specification()
@@ -438,7 +441,7 @@ pub fn main() -> Result<()> {
                         None,
                     ),
 
-                    Dialect::MiniGringo => {
+                    Fragment::MiniGringo => {
                         let specification = match files
                             .specification()
                             .ok_or(anyhow!("no specification was provided"))?

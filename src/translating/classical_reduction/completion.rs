@@ -340,7 +340,7 @@ mod tests {
             let left = src
                 .parse::<asp::Program>()
                 .unwrap()
-                .tau_star()
+                .tau_star(fol::Dialect::GringoFive)
                 .completion(inputs)
                 .unwrap();
             let right = target.parse().unwrap();

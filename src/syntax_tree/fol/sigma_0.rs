@@ -1,10 +1,11 @@
 use {
     crate::{
+        command_line::arguments,
         convenience::{apply::Apply as _, variable_selection::VariableSelection},
         formatting::fol::sigma_0::default::Format,
         parsing::fol::sigma_0::pest::{
             AnnotatedFormulaParser, AtomParser, AtomicFormulaParser, BinaryConnectiveParser,
-            BinaryOperatorParser, ComparisonParser, DirectionParser, FormulaParser,
+            BinaryOperatorParser, ComparisonParser, DialectParser, DirectionParser, FormulaParser,
             FunctionConstantParser, GeneralTermParser, GuardParser, IntegerTermParser,
             PlaceholderDeclarationParser, PredicateParser, QuantificationParser, QuantifierParser,
             RelationParser, RoleParser, SortParser, SpecificationParser, SymbolicTermParser,
@@ -1157,8 +1158,27 @@ pub struct PlaceholderDeclaration {
 
 impl_node!(PlaceholderDeclaration, Format, PlaceholderDeclarationParser);
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Dialect {
+    GringoFive,
+    GringoSix,
+}
+
+impl From<arguments::Dialect> for Dialect {
+    fn from(value: arguments::Dialect) -> Self {
+        match value {
+            arguments::Dialect::GringoFive => Dialect::GringoFive,
+            arguments::Dialect::GringoSix => Dialect::GringoSix,
+        }
+    }
+}
+
+impl_node!(Dialect, Format, DialectParser);
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UserGuideEntry {
+    ProgramDialect(Dialect),
+    SpecificationDialect(Dialect),
     InputPredicate(Predicate),
     OutputPredicate(Predicate),
     PlaceholderDeclaration(PlaceholderDeclaration),

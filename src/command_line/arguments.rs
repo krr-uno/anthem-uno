@@ -1,4 +1,5 @@
 use {
+    crate::syntax_tree::fol::sigma_0 as fol,
     clap::{Parser, Subcommand, ValueEnum},
     std::path::PathBuf,
 };
@@ -18,9 +19,9 @@ pub enum Command {
         #[arg(long, value_enum)]
         property: Property,
 
-        /// The ASP dialect of the input
+        /// The ASP language fragment of the input
         #[arg(long, value_enum, default_value_t)]
-        dialect: Dialect,
+        fragment: Fragment,
 
         /// The file to analyze
         input: Option<PathBuf>,
@@ -68,6 +69,10 @@ pub enum Command {
         #[arg(long, action)]
         display_latex: bool,
 
+        /// The dialect governs which tau-star variant is applied in translation
+        #[arg(long, value_enum)]
+        dialect: Dialect,
+
         /// The file to translate
         input: Option<PathBuf>,
     },
@@ -82,9 +87,9 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         decomposition: Decomposition,
 
-        /// The ASP dialect of the input
+        /// The ASP language fragment of the input
         #[arg(long, value_enum, default_value_t)]
-        dialect: Dialect,
+        fragment: Fragment,
 
         /// The translation used to obtain the program's formula representation
         #[arg(long, value_enum, default_value_t)]
@@ -167,10 +172,17 @@ pub enum Command {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum Dialect {
+pub enum Fragment {
     MiniGringo,
     #[default]
     MiniGringoCL,
+}
+
+#[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Dialect {
+    #[default]
+    GringoFive,
+    GringoSix,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

@@ -67,8 +67,8 @@ impl Task for StrongEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
 
-        let mut left = self.left.tau_star();
-        let mut right = self.right.tau_star();
+        let mut left = self.left.tau_star(fol::Dialect::GringoFive);
+        let mut right = self.right.tau_star(fol::Dialect::GringoFive);
 
         if self.simplify {
             let mut portfolio = [INTUITIONISTIC, HT].concat().into_iter().compose();
@@ -211,8 +211,8 @@ impl Task for StrongEquivalenceCounterModelTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
 
-        let mut left = self.left.tau_star();
-        let mut right = self.right.tau_star();
+        let mut left = self.left.tau_star(fol::Dialect::GringoFive);
+        let mut right = self.right.tau_star(fol::Dialect::GringoFive);
 
         if self.simplify {
             let mut portfolio = [INTUITIONISTIC, HT].concat().into_iter().compose();

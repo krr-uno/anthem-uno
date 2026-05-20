@@ -1,7 +1,10 @@
 use {
     crate::{
         convenience::variable_selection::VariableSelection,
-        syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            asp::mini_gringo as asp,
+            fol::sigma_0::{self as fol, Dialect},
+        },
     },
     indexmap::IndexSet,
 };
@@ -431,9 +434,6 @@ fn val(t: asp::Term, z: fol::Variable) -> fol::Formula {
                 asp::BinaryOperator::Interval => {
                     construct_interval_formula(valti, valtj, var1, var2, var3, z)
                 }
-                asp::BinaryOperator::DivideInteger | asp::BinaryOperator::ModuloInteger => {
-                    unimplemented!("mini-gringo does not support gringo 6 division or modulo")
-                }
             }
         }
     }
@@ -844,13 +844,13 @@ fn tau_star(p: asp::Program) -> fol::Theory {
 pub trait TauStar {
     type Output;
 
-    fn tau_star(self) -> Self::Output;
+    fn tau_star(self, dialect: Dialect) -> Self::Output;
 }
 
 impl TauStar for asp::Program {
     type Output = fol::Theory;
 
-    fn tau_star(self) -> Self::Output {
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
         tau_star(self)
     }
 }

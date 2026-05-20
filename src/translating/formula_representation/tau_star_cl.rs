@@ -8,9 +8,9 @@ use {
         syntax_tree::{
             asp::mini_gringo_cl as asp,
             fol::sigma_0::{
-                Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula,
-                GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation, Sort,
-                SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
+                Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Dialect,
+                Formula, GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation,
+                Sort, SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
             },
         },
     },
@@ -509,73 +509,73 @@ fn division_helper_f4(
 // Follows Verifying Tight Logic Programs with Anthem and Vampire
 // Division: exists I J Q R (F4(IJQR) & Z = Q)
 // Modulo:   exists I J Q R (F4(IJQR) & Z = R)
-fn construct_gsix_partial_function_formula(
-    valti: Formula,
-    valtj: Formula,
-    binop: asp::BinaryOperator,
-    i: Variable,
-    j: Variable,
-    z: Variable,
-) -> Formula {
-    assert_eq!(i.sort, Sort::Integer);
-    assert_eq!(j.sort, Sort::Integer);
+// fn construct_gsix_partial_function_formula(
+//     valti: Formula,
+//     valtj: Formula,
+//     binop: asp::BinaryOperator,
+//     i: Variable,
+//     j: Variable,
+//     z: Variable,
+// ) -> Formula {
+//     assert_eq!(i.sort, Sort::Integer);
+//     assert_eq!(j.sort, Sort::Integer);
 
-    let mut taken_vars = IndexSet::new();
-    taken_vars.insert(z.clone());
-    let qvar = Variable {
-        name: taken_vars.choose_fresh_variable("Q"),
-        sort: Sort::Integer,
-    };
-    let rvar = Variable {
-        name: taken_vars.choose_fresh_variable("R"),
-        sort: Sort::Integer,
-    };
+//     let mut taken_vars = IndexSet::new();
+//     taken_vars.insert(z.clone());
+//     let qvar = Variable {
+//         name: taken_vars.choose_fresh_variable("Q"),
+//         sort: Sort::Integer,
+//     };
+//     let rvar = Variable {
+//         name: taken_vars.choose_fresh_variable("R"),
+//         sort: Sort::Integer,
+//     };
 
-    let quantification = Quantification {
-        quantifier: Quantifier::Exists,
-        variables: vec![i.clone(), j.clone(), qvar.clone(), rvar.clone()],
-    };
+//     let quantification = Quantification {
+//         quantifier: Quantifier::Exists,
+//         variables: vec![i.clone(), j.clone(), qvar.clone(), rvar.clone()],
+//     };
 
-    match binop {
-        // exists I J Q R (F4(IJQR) & Z = Q)
-        asp::BinaryOperator::DivideInteger => Formula::QuantifiedFormula {
-            quantification,
-            formula: Formula::BinaryFormula {
-                connective: BinaryConnective::Conjunction,
-                lhs: division_helper_f4(valti, valtj, i, j, qvar.clone(), rvar).into(),
-                rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
-                    term: z.into(),
-                    guards: vec![Guard {
-                        relation: Relation::Equal,
-                        term: qvar.into(),
-                    }],
-                }))
-                .into(),
-            }
-            .into(),
-        },
+//     match binop {
+//         // exists I J Q R (F4(IJQR) & Z = Q)
+//         asp::BinaryOperator::DivideInteger => Formula::QuantifiedFormula {
+//             quantification,
+//             formula: Formula::BinaryFormula {
+//                 connective: BinaryConnective::Conjunction,
+//                 lhs: division_helper_f4(valti, valtj, i, j, qvar.clone(), rvar).into(),
+//                 rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+//                     term: z.into(),
+//                     guards: vec![Guard {
+//                         relation: Relation::Equal,
+//                         term: qvar.into(),
+//                     }],
+//                 }))
+//                 .into(),
+//             }
+//             .into(),
+//         },
 
-        // exists I J Q R (F4(IJQR) & Z = R)
-        asp::BinaryOperator::ModuloInteger => Formula::QuantifiedFormula {
-            quantification,
-            formula: Formula::BinaryFormula {
-                connective: BinaryConnective::Conjunction,
-                lhs: division_helper_f4(valti, valtj, i, j, qvar, rvar.clone()).into(),
-                rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
-                    term: z.into(),
-                    guards: vec![Guard {
-                        relation: Relation::Equal,
-                        term: rvar.into(),
-                    }],
-                }))
-                .into(),
-            }
-            .into(),
-        },
+//         // exists I J Q R (F4(IJQR) & Z = R)
+//         asp::BinaryOperator::ModuloInteger => Formula::QuantifiedFormula {
+//             quantification,
+//             formula: Formula::BinaryFormula {
+//                 connective: BinaryConnective::Conjunction,
+//                 lhs: division_helper_f4(valti, valtj, i, j, qvar, rvar.clone()).into(),
+//                 rhs: Formula::AtomicFormula(AtomicFormula::Comparison(Comparison {
+//                     term: z.into(),
+//                     guards: vec![Guard {
+//                         relation: Relation::Equal,
+//                         term: rvar.into(),
+//                     }],
+//                 }))
+//                 .into(),
+//             }
+//             .into(),
+//         },
 
-        _ => unreachable!("division and modulo are the only supported partial functions"),
-    }
-}
+//         _ => unreachable!("division and modulo are the only supported partial functions"),
+//     }
+// }
 
 // val_t(Z)
 fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formula {
@@ -640,16 +640,16 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
                         z,
                     )
                 }
-                asp::BinaryOperator::DivideInteger | asp::BinaryOperator::ModuloInteger => {
-                    construct_gsix_partial_function_formula(
-                        valti,
-                        valtj,
-                        op,
-                        fresh_int_vars["I"].clone(),
-                        fresh_int_vars["J"].clone(),
-                        z,
-                    )
-                }
+                // asp::BinaryOperator::DivideInteger | asp::BinaryOperator::ModuloInteger => {
+                //     construct_gsix_partial_function_formula(
+                //         valti,
+                //         valtj,
+                //         op,
+                //         fresh_int_vars["I"].clone(),
+                //         fresh_int_vars["J"].clone(),
+                //         z,
+                //     )
+                // }
                 asp::BinaryOperator::Interval => construct_interval_formula(
                     valti,
                     valtj,
@@ -1122,7 +1122,7 @@ fn tau_star(p: asp::Program) -> Theory {
 impl TauStar for asp::Program {
     type Output = Theory;
 
-    fn tau_star(self) -> Self::Output {
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
         tau_star(self)
     }
 }
@@ -1238,14 +1238,14 @@ mod tests {
                 "p(1/0)",
                 "exists Z (exists I$i J$i K$i (I$i = 1 and J$i = 0 and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and p(Z))",
             ),
-            (
-                "X // Y > 5",
-                "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = Q$i) and Z1 = 5 and Z > Z1)",
-            ),
-            (
-                "X @ Y > 5",
-                "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = R$i) and Z1 = 5 and Z > Z1)",
-            ),
+            // (
+            //     "X // Y > 5",
+            //     "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = Q$i) and Z1 = 5 and Z > Z1)",
+            // ),
+            // (
+            //     "X @ Y > 5",
+            //     "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = R$i) and Z1 = 5 and Z > Z1)",
+            // ),
         ] {
             let left = tau_b(src.parse().unwrap());
             let right = target.parse().unwrap();
