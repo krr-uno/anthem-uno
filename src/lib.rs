@@ -8,5 +8,6 @@ pub(crate) mod simplifying;
 pub mod syntax_tree;
 pub mod translating;
 pub(crate) mod verifying;
+pub(crate) mod normalizing;
 
 pub use command_line::procedures::main;
