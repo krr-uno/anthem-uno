@@ -3,11 +3,11 @@ pub(crate) mod breaking;
 pub(crate) mod command_line;
 pub mod convenience;
 pub mod formatting;
+pub(crate) mod normalizing;
 pub mod parsing;
 pub(crate) mod simplifying;
 pub mod syntax_tree;
 pub mod translating;
 pub(crate) mod verifying;
-pub(crate) mod normalizing;
 
 pub use command_line::procedures::main;

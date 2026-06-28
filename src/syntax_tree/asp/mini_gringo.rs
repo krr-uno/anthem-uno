@@ -109,6 +109,15 @@ impl From<asp::mini_gringo_cl::BinaryOperator> for BinaryOperator {
     }
 }
 
+impl BinaryOperator {
+    pub fn definite(&self) -> bool {
+        match &self {
+            BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
     PrecomputedTerm(PrecomputedTerm),
@@ -187,6 +196,18 @@ impl Term {
                 functions.extend(rhs.function_constants());
                 functions
             }
+        }
+    }
+
+    pub fn numeric(&self) -> bool {
+        match &self {
+            Term::PrecomputedTerm(t) => match t {
+                &PrecomputedTerm::Numeral(_) => true,
+                _ => false,
+            },
+            Term::Variable(_) => true,
+            Term::UnaryOperation { arg, .. } => (**arg).numeric(),
+            Term::BinaryOperation { lhs, rhs, .. } => (**lhs).numeric() && (**rhs).numeric(),
         }
     }
 }
@@ -376,6 +397,15 @@ impl Comparison {
         let mut functions = self.lhs.function_constants();
         functions.extend(self.rhs.function_constants());
         functions
+    }
+
+    // An equation is a comparison of the form t1 = t2.
+    // An equation is numeric if all basic symbols occurring in it are numerals.
+    pub fn numeric_equation(&self) -> bool {
+        match self.relation {
+            Relation::Equal => self.lhs.numeric() && self.rhs.numeric(),
+            _ => false,
+        }
     }
 }
 
