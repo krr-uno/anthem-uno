@@ -344,6 +344,7 @@ mod tests {
     fn test_numeric_normal_form_rule() {
         for (src, target) in [
             ("p(1..8).", "p(V0) :- V0 = 1..8."),
+            ("p(X/Y+1) :- q(X,Y).", "p(V0+1) :- q(X,Y), V0 = X/Y."),
             (
                 "q(1..(X/2)) :- p(X).",
                 "q(V1) :- p(X), V0 = X/2, V1 = 1..V0.",
