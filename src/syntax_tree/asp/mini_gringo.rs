@@ -111,10 +111,10 @@ impl From<asp::mini_gringo_cl::BinaryOperator> for BinaryOperator {
 
 impl BinaryOperator {
     pub fn definite(&self) -> bool {
-        match &self {
-            BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            BinaryOperator::Add | BinaryOperator::Subtract | BinaryOperator::Multiply
+        )
     }
 }
 
@@ -201,10 +201,7 @@ impl Term {
 
     pub fn numeric(&self) -> bool {
         match &self {
-            Term::PrecomputedTerm(t) => match t {
-                &PrecomputedTerm::Numeral(_) => true,
-                _ => false,
-            },
+            Term::PrecomputedTerm(t) => matches!(t, &PrecomputedTerm::Numeral(_)),
             Term::Variable(_) => true,
             Term::UnaryOperation { arg, .. } => (**arg).numeric(),
             Term::BinaryOperation { lhs, rhs, .. } => (**lhs).numeric() && (**rhs).numeric(),

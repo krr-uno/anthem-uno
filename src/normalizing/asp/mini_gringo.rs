@@ -3,8 +3,8 @@ use indexmap::IndexSet;
 use crate::{
     convenience::variable_selection::VariableSelection,
     syntax_tree::asp::mini_gringo::{
-        Atom, AtomicFormula, Body, Comparison, Head, Literal, PrecomputedTerm, Relation, Rule,
-        Term, Variable,
+        Atom, AtomicFormula, Body, Comparison, Head, Literal, PrecomputedTerm, Program, Relation,
+        Rule, Term, Variable,
     },
 };
 
@@ -213,7 +213,7 @@ fn term_replacement_rule(rule: Rule) -> Rule {
         }
         Head::Choice(atom) => {
             let (new_atom, v_equals_t) = term_replacement_atom(atom, taken_vars.clone());
-            (Head::Basic(new_atom), v_equals_t)
+            (Head::Choice(new_atom), v_equals_t)
         }
         Head::Falsity => (Head::Falsity, None),
     };
@@ -247,7 +247,7 @@ fn term_replacement_rule(rule: Rule) -> Rule {
 // innermost term replacement can occur in any order
 // so, remove abnormalities in the head, then the body constructs (DFS)
 // apply procedure until rule stops changing
-pub fn numeric_normal_form(rule: Rule) -> Rule {
+fn numeric_normal_form_rule(rule: Rule) -> Rule {
     let mut previous = rule;
     let mut current = term_replacement_rule(previous.clone());
 
@@ -259,11 +259,21 @@ pub fn numeric_normal_form(rule: Rule) -> Rule {
     current
 }
 
+pub fn numeric_normal_form(program: Program) -> Program {
+    Program {
+        rules: program
+            .rules
+            .into_iter()
+            .map(numeric_normal_form_rule)
+            .collect(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use {
-        super::{numeric_normal_form, term_replacement, term_replacement_atomic_formula},
+        super::{numeric_normal_form_rule, term_replacement, term_replacement_atomic_formula},
         crate::syntax_tree::asp::mini_gringo::Comparison,
         indexmap::IndexSet,
     };
@@ -338,12 +348,23 @@ mod tests {
     }
 
     #[test]
-    fn test_numeric_normal_form() {
+    fn test_numeric_normal_form_rule() {
         for (src, target) in [
             ("p(1..8).", "p(V0) :- V0 = 1..8."),
-            ("q(1..(X/2)) :- p(X).", "q(V1) :- p(X), V0 = X/2, V1 = 1..V0."),
+            (
+                "q(1..(X/2)) :- p(X).",
+                "q(V1) :- p(X), V0 = X/2, V1 = 1..V0.",
+            ),
+            (
+                "{q(1..8)} :- 4 = 1/X, p((1+a)..5).",
+                "{q(V0)} :- 4 = 1/X, p(V2), V0 = 1..8, V1 = a, V2 = 1+V1..5.",
+            ),
+            (
+                ":- 1/Y = 4, p(Y), q(Y/5).",
+                ":- V0 = 4, p(Y), q(V1), V0 = 1/Y, V1 = Y/5.",
+            ),
         ] {
-            let src = numeric_normal_form(src.parse().unwrap());
+            let src = numeric_normal_form_rule(src.parse().unwrap());
             let target = target.parse().unwrap();
             assert_eq!(src, target, "\n{src} \n!= \n{target}")
         }
