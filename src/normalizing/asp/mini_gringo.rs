@@ -120,13 +120,6 @@ fn term_replacement_atom(atom: Atom, taken_vars: IndexSet<Variable>) -> (Atom, O
     let mut v_equals_t = None;
     let mut new_terms = atom.terms.clone();
     for (i, term) in atom.terms.into_iter().enumerate() {
-        // let previous = term.clone();
-        // let (current, vt) = term_replacement(term, taken_vars.clone(), false, false);
-        // if previous != current {
-        //     new_terms[i] = current;
-        //     v_equals_t = vt;
-        //     break;
-        // }
         let (current, vt) = term_replacement(term, taken_vars.clone(), false, false);
         if vt.is_some() {
             new_terms[i] = current;
