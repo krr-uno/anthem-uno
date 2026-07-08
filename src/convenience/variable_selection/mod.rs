@@ -19,6 +19,23 @@ pub(crate) trait VariableSelection {
     fn choose_fresh_variables(&self, variant: &str, n: usize) -> Vec<String>;
 }
 
+impl VariableSelection for IndexSet<String> {
+    fn choose_fresh_variable(&self, variant: &str) -> String {
+        if !self.contains(variant) {
+            return variant.to_string();
+        }
+
+        let prefix = variant.to_string();
+        sequence(1, &prefix)
+            .find(|candidate| !self.contains(candidate))
+            .unwrap()
+    }
+
+    fn choose_fresh_variables(&self, variant: &str, n: usize) -> Vec<String> {
+        todo!()
+    }
+}
+
 impl VariableSelection for IndexSet<fol::Variable> {
     fn choose_fresh_variable(&self, variant: &str) -> String {
         let mut taken_var_names = IndexSet::new();

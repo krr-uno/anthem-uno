@@ -16,7 +16,7 @@ use {
             apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
         },
         formatting::fol::sigma_0::latex,
-        normalizing::asp::mini_gringo::numeric_normal_form,
+        normalizing::asp::numeric_normal::numeric_normal_form,
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp, fol::sigma_0 as fol},
         translating::{
