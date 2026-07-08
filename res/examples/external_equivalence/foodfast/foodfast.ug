@@ -1,0 +1,3 @@
+input: restaurant/2.
+assumption: forall D K (restaurant(D,K) -> exists I$ (K = I$)).
+output: candidate/1.
