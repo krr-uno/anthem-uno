@@ -5,12 +5,12 @@ use crate::syntax_tree::asp::mini_gringo_cl::{
 
 impl Term {
     pub fn is_precomputed(&self) -> bool {
-        matches!(self, Term::PrecomputedTerm(_))
+        matches!(self, Term::BasicTerm(_))
     }
 
     pub fn contains_arithmetic_operations(&self) -> bool {
         match self {
-            Term::PrecomputedTerm(_) | Term::Variable(_) => false,
+            Term::BasicTerm(_) | Term::Variable(_) => false,
             Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
         }
     }

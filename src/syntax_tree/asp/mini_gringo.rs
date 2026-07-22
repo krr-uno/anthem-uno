@@ -2,8 +2,8 @@ use {
     crate::{
         formatting::asp::mini_gringo::default::Format,
         parsing::asp::mini_gringo::pest::{
-            AtomParser, AtomicFormulaParser, BinaryOperatorParser, BodyParser, ComparisonParser,
-            HeadParser, LiteralParser, PrecomputedTermParser, PredicateParser, ProgramParser,
+            AtomParser, AtomicFormulaParser, BasicSymbolParser, BinaryOperatorParser, BodyParser,
+            ComparisonParser, HeadParser, LiteralParser, PredicateParser, ProgramParser,
             RelationParser, RuleParser, SignParser, TermParser, UnaryOperatorParser,
             VariableParser,
         },
@@ -36,7 +36,7 @@ impl BasicSymbol {
     }
 }
 
-impl_node!(BasicSymbol, Format, PrecomputedTermParser);
+impl_node!(BasicSymbol, Format, BasicSymbolParser);
 
 impl From<asp::mini_gringo_cl::BasicSymbol> for BasicSymbol {
     fn from(value: asp::mini_gringo_cl::BasicSymbol) -> Self {
@@ -120,7 +120,7 @@ impl BinaryOperator {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
-    PrecomputedTerm(BasicSymbol),
+    BasicSymbol(BasicSymbol),
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
@@ -140,7 +140,7 @@ impl TryFrom<mini_gringo_cl::Term> for Term {
 
     fn try_from(value: mini_gringo_cl::Term) -> Result<Self, Self::Error> {
         match value {
-            mini_gringo_cl::Term::PrecomputedTerm(t) => Ok(Term::PrecomputedTerm(t.into())),
+            mini_gringo_cl::Term::BasicTerm(t) => Ok(Term::BasicSymbol(t.into())),
             mini_gringo_cl::Term::Variable(v) => Ok(Term::Variable(v.into())),
             mini_gringo_cl::Term::UnaryOperation {
                 op: op_cl,
@@ -173,9 +173,13 @@ impl TryFrom<mini_gringo_cl::Term> for Term {
 }
 
 impl Term {
+    pub fn precomputed(&self) -> bool {
+        self.variables().is_empty()
+    }
+
     pub fn variables(&self) -> IndexSet<Variable> {
         match &self {
-            Term::PrecomputedTerm(_) => IndexSet::new(),
+            Term::BasicSymbol(_) => IndexSet::new(),
             Term::Variable(v) => IndexSet::from([v.clone()]),
             Term::UnaryOperation { arg, .. } => arg.variables(),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -188,7 +192,7 @@ impl Term {
 
     pub fn function_constants(&self) -> IndexSet<String> {
         match &self {
-            Term::PrecomputedTerm(t) => t.function_constants(),
+            Term::BasicSymbol(t) => t.function_constants(),
             Term::Variable(_) => IndexSet::new(),
             Term::UnaryOperation { arg, .. } => arg.function_constants(),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -201,7 +205,7 @@ impl Term {
 
     pub fn numeric(&self) -> bool {
         match &self {
-            Term::PrecomputedTerm(t) => matches!(t, &BasicSymbol::Numeral(_)),
+            Term::BasicSymbol(t) => matches!(t, &BasicSymbol::Numeral(_)),
             Term::Variable(_) => true,
             Term::UnaryOperation { arg, .. } => (**arg).numeric(),
             Term::BinaryOperation { lhs, rhs, .. } => (**lhs).numeric() && (**rhs).numeric(),
@@ -779,8 +783,7 @@ impl TryFrom<mini_gringo_cl::Program> for Program {
 mod tests {
     use {
         super::{
-            Atom, AtomicFormula, Body, Comparison, Head, BasicSymbol, Program, Relation, Rule,
-            Term,
+            Atom, AtomicFormula, BasicSymbol, Body, Comparison, Head, Program, Relation, Rule, Term,
         },
         indexmap::IndexSet,
     };
@@ -796,8 +799,8 @@ mod tests {
                 }),
                 body: Body {
                     formulas: vec![AtomicFormula::Comparison(Comparison {
-                        lhs: Term::PrecomputedTerm(BasicSymbol::Symbol("a".into())),
-                        rhs: Term::PrecomputedTerm(BasicSymbol::Symbol("b".into())),
+                        lhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())),
+                        rhs: Term::BasicSymbol(BasicSymbol::Symbol("b".into())),
                         relation: Relation::NotEqual,
                     })],
                 },

@@ -4,9 +4,8 @@ use {
         syntax_tree::{
             Node,
             asp::mini_gringo::{
-                Atom, AtomicFormula, BinaryOperator, Body, Comparison, Head, Literal,
-                BasicSymbol, Predicate, Program, Relation, Rule, Sign, Term, UnaryOperator,
-                Variable,
+                Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, Comparison, Head, Literal,
+                Predicate, Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
             },
         },
     },
@@ -58,12 +57,12 @@ impl Display for Format<'_, BinaryOperator> {
 impl Precedence for Format<'_, Term> {
     fn precedence(&self) -> usize {
         match self.0 {
-            Term::PrecomputedTerm(BasicSymbol::Numeral(1..)) => 1,
+            Term::BasicSymbol(BasicSymbol::Numeral(1..)) => 1,
             Term::UnaryOperation {
                 op: UnaryOperator::Negative,
                 ..
             }
-            | Term::PrecomputedTerm(_)
+            | Term::BasicSymbol(_)
             | Term::Variable(_) => 0,
             Term::BinaryOperation {
                 op:
@@ -96,7 +95,7 @@ impl Precedence for Format<'_, Term> {
                 BinaryOperator::Interval => write!(f, "{}", Format(op)),
                 _ => write!(f, " {} ", Format(op)),
             },
-            Term::PrecomputedTerm(_) | Term::Variable(_) => unreachable!(),
+            Term::BasicSymbol(_) | Term::Variable(_) => unreachable!(),
         }
     }
 }
@@ -104,7 +103,7 @@ impl Precedence for Format<'_, Term> {
 impl Display for Format<'_, Term> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Term::PrecomputedTerm(c) => Format(c).fmt(f),
+            Term::BasicSymbol(c) => Format(c).fmt(f),
             Term::Variable(v) => Format(v).fmt(f),
             Term::UnaryOperation { arg, .. } => self.fmt_unary(Format(arg.as_ref()), f),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -243,7 +242,7 @@ mod tests {
     use {
         super::Format,
         crate::syntax_tree::asp::mini_gringo::{
-            Atom, AtomicFormula, BinaryOperator, Body, Comparison, Head, Literal, BasicSymbol,
+            Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, Comparison, Head, Literal,
             Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
         },
     };
@@ -254,10 +253,7 @@ mod tests {
         assert_eq!(Format(&BasicSymbol::Numeral(-1)).to_string(), "-1");
         assert_eq!(Format(&BasicSymbol::Numeral(0)).to_string(), "0");
         assert_eq!(Format(&BasicSymbol::Numeral(42)).to_string(), "42");
-        assert_eq!(
-            Format(&BasicSymbol::Symbol("a".into())).to_string(),
-            "a"
-        );
+        assert_eq!(Format(&BasicSymbol::Symbol("a".into())).to_string(), "a");
         assert_eq!(Format(&BasicSymbol::Supremum).to_string(), "#sup");
     }
 
@@ -284,7 +280,7 @@ mod tests {
     #[test]
     fn format_term() {
         assert_eq!(
-            Format(&Term::PrecomputedTerm(BasicSymbol::Numeral(42))).to_string(),
+            Format(&Term::BasicSymbol(BasicSymbol::Numeral(42))).to_string(),
             "42"
         );
 
@@ -296,11 +292,11 @@ mod tests {
         assert_eq!(
             Format(&Term::BinaryOperation {
                 op: BinaryOperator::Add,
-                lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(1)).into(),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                 rhs: Term::BinaryOperation {
                     op: BinaryOperator::Multiply,
-                    lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(2)).into(),
-                    rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(3)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                 }
                 .into(),
             })
@@ -311,11 +307,11 @@ mod tests {
         assert_eq!(
             Format(&Term::BinaryOperation {
                 op: BinaryOperator::Multiply,
-                lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(1)).into(),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                 rhs: Term::BinaryOperation {
                     op: BinaryOperator::Add,
-                    lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(2)).into(),
-                    rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(3)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                 }
                 .into(),
             })
@@ -326,11 +322,11 @@ mod tests {
         assert_eq!(
             Format(&Term::BinaryOperation {
                 op: BinaryOperator::Add,
-                lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(1)).into(),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                 rhs: Term::BinaryOperation {
                     op: BinaryOperator::Add,
-                    lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(2)).into(),
-                    rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(3)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                 }
                 .into(),
             })
@@ -343,11 +339,11 @@ mod tests {
                 op: BinaryOperator::Add,
                 lhs: Term::BinaryOperation {
                     op: BinaryOperator::Add,
-                    lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(1)).into(),
-                    rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(2)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                 }
                 .into(),
-                rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(3)).into(),
+                rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
             })
             .to_string(),
             "1 + 2 + 3"
@@ -368,7 +364,7 @@ mod tests {
         assert_eq!(
             Format(&Atom {
                 predicate_symbol: "p".into(),
-                terms: vec![Term::PrecomputedTerm(BasicSymbol::Numeral(1))],
+                terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1))],
             })
             .to_string(),
             "p(1)"
@@ -378,8 +374,8 @@ mod tests {
             Format(&Atom {
                 predicate_symbol: "p".into(),
                 terms: vec![
-                    Term::PrecomputedTerm(BasicSymbol::Numeral(1)),
-                    Term::PrecomputedTerm(BasicSymbol::Numeral(2))
+                    Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                    Term::BasicSymbol(BasicSymbol::Numeral(2))
                 ],
             })
             .to_string(),
@@ -425,7 +421,7 @@ mod tests {
             Format(&Comparison {
                 relation: Relation::Equal,
                 lhs: Term::Variable(Variable("I".into())),
-                rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(1))
+                rhs: Term::BasicSymbol(BasicSymbol::Numeral(1))
             })
             .to_string(),
             "I = 1"
@@ -449,8 +445,8 @@ mod tests {
         assert_eq!(
             Format(&AtomicFormula::Comparison(Comparison {
                 relation: Relation::NotEqual,
-                lhs: Term::PrecomputedTerm(BasicSymbol::Numeral(1)),
-                rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(2))
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                rhs: Term::BasicSymbol(BasicSymbol::Numeral(2))
             }))
             .to_string(),
             "1 != 2"
@@ -497,7 +493,7 @@ mod tests {
                     AtomicFormula::Comparison(Comparison {
                         relation: Relation::Less,
                         lhs: Term::Variable(Variable("X".into())),
-                        rhs: Term::PrecomputedTerm(BasicSymbol::Numeral(10))
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(10))
                     })
                 ]
             })

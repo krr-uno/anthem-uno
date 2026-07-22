@@ -2,10 +2,11 @@ use {
     crate::{
         formatting::asp::gringo::default::Format,
         parsing::asp::gringo::pest::{
-            AtomParser, AtomicFormulaParser, BinaryOperatorParser, BodyLiteralParser, BodyParser,
-            ComparisonParser, ConditionalBodyParser, ConditionalHeadParser, HeadParser,
-            LiteralParser, PrecomputedTermParser, PredicateParser, ProgramParser, RelationParser,
-            RuleParser, SignParser, TermParser, UnaryOperatorParser, VariableParser,
+            AtomParser, AtomicFormulaParser, BasicSymbolParser, BinaryOperatorParser,
+            BodyLiteralParser, BodyParser, ComparisonParser, ConditionalBodyParser,
+            ConditionalHeadParser, HeadParser, LiteralParser, PredicateParser, ProgramParser,
+            RelationParser, RuleParser, SignParser, TermParser, UnaryOperatorParser,
+            VariableParser,
         },
         syntax_tree::{Node, asp, impl_node},
     },
@@ -32,7 +33,7 @@ impl BasicSymbol {
     }
 }
 
-impl_node!(BasicSymbol, Format, PrecomputedTermParser);
+impl_node!(BasicSymbol, Format, BasicSymbolParser);
 
 // Potassco User Guide, Anonymous Variables:
 // Unlike a variable name whose recurrences within a rule refer to the same variable,
@@ -84,7 +85,7 @@ impl From<asp::mini_gringo::BinaryOperator> for BinaryOperator {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
-    PrecomputedTerm(BasicSymbol),
+    BasicSymbol(BasicSymbol),
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
@@ -100,9 +101,13 @@ pub enum Term {
 impl_node!(Term, Format, TermParser);
 
 impl Term {
+    pub fn precomputed(&self) -> bool {
+        self.variables().is_empty()
+    }
+
     pub fn variables(&self) -> IndexSet<Variable> {
         match &self {
-            Term::PrecomputedTerm(_) => IndexSet::new(),
+            Term::BasicSymbol(_) => IndexSet::new(),
             Term::Variable(v) => IndexSet::from([v.clone()]),
             Term::UnaryOperation { arg, .. } => arg.variables(),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -115,7 +120,7 @@ impl Term {
 
     pub fn function_constants(&self) -> IndexSet<String> {
         match &self {
-            Term::PrecomputedTerm(t) => t.function_constants(),
+            Term::BasicSymbol(t) => t.function_constants(),
             Term::Variable(_) => IndexSet::new(),
             Term::UnaryOperation { arg, .. } => arg.function_constants(),
             Term::BinaryOperation { lhs, rhs, .. } => {

@@ -4,9 +4,9 @@ use {
         syntax_tree::{
             Node,
             asp::gringo::{
-                Atom, AtomicFormula, BinaryOperator, Body, BodyLiteral, Comparison,
-                ConditionalBody, ConditionalHead, Head, Literal, BasicSymbol, Predicate,
-                Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
+                Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, BodyLiteral, Comparison,
+                ConditionalBody, ConditionalHead, Head, Literal, Predicate, Program, Relation,
+                Rule, Sign, Term, UnaryOperator, Variable,
             },
         },
     },
@@ -62,8 +62,8 @@ impl Display for Format<'_, BinaryOperator> {
 impl Precedence for Format<'_, Term> {
     fn precedence(&self) -> usize {
         match self.0 {
-            Term::PrecomputedTerm(BasicSymbol::Numeral(1..)) => 1,
-            Term::UnaryOperation { .. } | Term::PrecomputedTerm(_) | Term::Variable(_) => 0,
+            Term::BasicSymbol(BasicSymbol::Numeral(1..)) => 1,
+            Term::UnaryOperation { .. } | Term::BasicSymbol(_) | Term::Variable(_) => 0,
             Term::BinaryOperation {
                 op:
                     BinaryOperator::Multiply
@@ -95,7 +95,7 @@ impl Precedence for Format<'_, Term> {
                 BinaryOperator::Interval => write!(f, "{}", Format(op)),
                 _ => write!(f, " {} ", Format(op)),
             },
-            Term::PrecomputedTerm(_) | Term::Variable(_) => unreachable!(),
+            Term::BasicSymbol(_) | Term::Variable(_) => unreachable!(),
         }
     }
 }
@@ -103,7 +103,7 @@ impl Precedence for Format<'_, Term> {
 impl Display for Format<'_, Term> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Term::PrecomputedTerm(c) => Format(c).fmt(f),
+            Term::BasicSymbol(c) => Format(c).fmt(f),
             Term::Variable(v) => Format(v).fmt(f),
             Term::UnaryOperation {
                 op: UnaryOperator::Negative,

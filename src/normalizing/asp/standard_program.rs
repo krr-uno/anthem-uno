@@ -12,7 +12,7 @@ fn standardize_term(
     taken_variables: &mut IndexSet<String>,
 ) -> mini_gringo_cl::Term {
     match term {
-        gringo::Term::PrecomputedTerm(t) => mini_gringo_cl::Term::PrecomputedTerm(t.into()),
+        gringo::Term::BasicSymbol(t) => mini_gringo_cl::Term::BasicTerm(t.into()),
         gringo::Term::Variable(variable) => match variable.name {
             Some(name) => mini_gringo_cl::Term::Variable(mini_gringo_cl::Variable(name)),
             None => {
