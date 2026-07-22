@@ -32,7 +32,29 @@ impl VariableSelection for IndexSet<String> {
     }
 
     fn choose_fresh_variables(&self, variant: &str, n: usize) -> Vec<String> {
-        todo!()
+        let mut selected_variables = Vec::new();
+
+        if n < 1 {
+            return selected_variables;
+        }
+
+        if !self.contains(variant) {
+            selected_variables.push(variant.to_string());
+        }
+
+        let mut i = 1;
+        let prefix = variant.to_string();
+        while selected_variables.len() < n {
+            let fresh_var = sequence(i, &prefix)
+                .find(|candidate| {
+                    !self.contains(candidate) && !selected_variables.contains(candidate)
+                })
+                .unwrap();
+            selected_variables.push(fresh_var);
+            i += 1;
+        }
+
+        selected_variables
     }
 }
 
