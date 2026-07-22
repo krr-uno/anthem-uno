@@ -61,10 +61,10 @@ fn choose_fresh_ijk(taken_variables: IndexSet<Variable>) -> IndexMap<String, Var
 fn construct_equality_formula(term: asp::Term, z: Variable) -> Formula {
     let rhs = match term {
         asp::Term::PrecomputedTerm(t) => match t {
-            asp::PrecomputedTerm::Infimum => GeneralTerm::Infimum,
-            asp::PrecomputedTerm::Supremum => GeneralTerm::Supremum,
-            asp::PrecomputedTerm::Numeral(i) => GeneralTerm::IntegerTerm(IntegerTerm::Numeral(i)),
-            asp::PrecomputedTerm::Symbol(s) => GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol(s)),
+            asp::BasicSymbol::Infimum => GeneralTerm::Infimum,
+            asp::BasicSymbol::Supremum => GeneralTerm::Supremum,
+            asp::BasicSymbol::Numeral(i) => GeneralTerm::IntegerTerm(IntegerTerm::Numeral(i)),
+            asp::BasicSymbol::Symbol(s) => GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol(s)),
         },
         asp::Term::Variable(v) => GeneralTerm::Variable(v.0),
         _ => unreachable!(
@@ -598,7 +598,7 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
         asp::Term::PrecomputedTerm(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
         asp::Term::UnaryOperation { op, arg } => match op {
             asp::UnaryOperator::Negative => {
-                let lhs = asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Numeral(0)); // Shorthand for 0 - t
+                let lhs = asp::Term::PrecomputedTerm(asp::BasicSymbol::Numeral(0)); // Shorthand for 0 - t
                 let valti = val(lhs, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
                 let valtj = val(*arg, fresh_int_vars["J"].clone(), taken_variables); // val_t2(J)
                 construct_total_function_formula(

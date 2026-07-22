@@ -3,17 +3,17 @@ use indexmap::IndexSet;
 use crate::{
     convenience::variable_selection::VariableSelection,
     syntax_tree::asp::mini_gringo::{
-        Atom, AtomicFormula, Body, Comparison, Head, Literal, PrecomputedTerm, Program, Relation,
+        Atom, AtomicFormula, Body, Comparison, Head, Literal, BasicSymbol, Program, Relation,
         Rule, Term, Variable,
     },
 };
 
 // basic symbols in sigma_0 include symbolic constants, numerals, inf, and sup
 // when we don't allow constructor functions, basic symbols are just the set of precomputed terms
-fn leading_symbol_is_arithmetic_compatible(term: &PrecomputedTerm) -> bool {
+fn leading_symbol_is_arithmetic_compatible(term: &BasicSymbol) -> bool {
     match term {
-        PrecomputedTerm::Numeral(_) => true,
-        PrecomputedTerm::Infimum | PrecomputedTerm::Symbol(_) | PrecomputedTerm::Supremum => false,
+        BasicSymbol::Numeral(_) => true,
+        BasicSymbol::Infimum | BasicSymbol::Symbol(_) | BasicSymbol::Supremum => false,
     }
 }
 

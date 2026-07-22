@@ -23,10 +23,10 @@ use {
 fn contains_symbol_or_infimum_or_supremum(t: &asp::Term) -> bool {
     match t {
         asp::Term::Variable(_) => false,
-        asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Symbol(_)) => true,
-        asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Infimum) => true,
-        asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Supremum) => true,
-        asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Numeral(_)) => false,
+        asp::Term::PrecomputedTerm(asp::BasicSymbol::Symbol(_)) => true,
+        asp::Term::PrecomputedTerm(asp::BasicSymbol::Infimum) => true,
+        asp::Term::PrecomputedTerm(asp::BasicSymbol::Supremum) => true,
+        asp::Term::PrecomputedTerm(asp::BasicSymbol::Numeral(_)) => false,
         asp::Term::UnaryOperation {
             op: asp::UnaryOperator::Negative,
             arg,
@@ -95,14 +95,14 @@ fn p2f(t: &asp::Term, int_vars: &IndexSet<std::string::String>) -> Option<fol::G
             }
         }
         asp::Term::PrecomputedTerm(p) => Some(match p {
-            asp::PrecomputedTerm::Infimum => fol::GeneralTerm::Infimum,
-            asp::PrecomputedTerm::Numeral(i) => {
+            asp::BasicSymbol::Infimum => fol::GeneralTerm::Infimum,
+            asp::BasicSymbol::Numeral(i) => {
                 fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(*i))
             }
-            asp::PrecomputedTerm::Symbol(s) => {
+            asp::BasicSymbol::Symbol(s) => {
                 fol::GeneralTerm::SymbolicTerm(fol::SymbolicTerm::Symbol(s.to_string()))
             }
-            asp::PrecomputedTerm::Supremum => fol::GeneralTerm::Supremum,
+            asp::BasicSymbol::Supremum => fol::GeneralTerm::Supremum,
         }),
         _ => p2f_int_term(t).map(fol::GeneralTerm::IntegerTerm),
     }
@@ -113,7 +113,7 @@ fn p2f_int_term(t: &asp::Term) -> Option<fol::IntegerTerm> {
     // TODO: choose fresh variable names?
     match t {
         asp::Term::Variable(v) => Some(fol::IntegerTerm::Variable(v.0.clone())),
-        asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Numeral(i)) => {
+        asp::Term::PrecomputedTerm(asp::BasicSymbol::Numeral(i)) => {
             Some(fol::IntegerTerm::Numeral(*i))
         }
         asp::Term::UnaryOperation {

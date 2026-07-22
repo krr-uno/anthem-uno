@@ -5,7 +5,7 @@ use {
             Node,
             asp::gringo::{
                 Atom, AtomicFormula, BinaryOperator, Body, BodyLiteral, Comparison,
-                ConditionalBody, ConditionalHead, Head, Literal, PrecomputedTerm, Predicate,
+                ConditionalBody, ConditionalHead, Head, Literal, BasicSymbol, Predicate,
                 Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
             },
         },
@@ -15,13 +15,13 @@ use {
 
 pub struct Format<'a, N: Node>(pub &'a N);
 
-impl Display for Format<'_, PrecomputedTerm> {
+impl Display for Format<'_, BasicSymbol> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            PrecomputedTerm::Infimum => write!(f, "#inf"),
-            PrecomputedTerm::Numeral(n) => write!(f, "{n}"),
-            PrecomputedTerm::Symbol(s) => write!(f, "{s}"),
-            PrecomputedTerm::Supremum => write!(f, "#sup"),
+            BasicSymbol::Infimum => write!(f, "#inf"),
+            BasicSymbol::Numeral(n) => write!(f, "{n}"),
+            BasicSymbol::Symbol(s) => write!(f, "{s}"),
+            BasicSymbol::Supremum => write!(f, "#sup"),
         }
     }
 }
@@ -62,7 +62,7 @@ impl Display for Format<'_, BinaryOperator> {
 impl Precedence for Format<'_, Term> {
     fn precedence(&self) -> usize {
         match self.0 {
-            Term::PrecomputedTerm(PrecomputedTerm::Numeral(1..)) => 1,
+            Term::PrecomputedTerm(BasicSymbol::Numeral(1..)) => 1,
             Term::UnaryOperation { .. } | Term::PrecomputedTerm(_) | Term::Variable(_) => 0,
             Term::BinaryOperation {
                 op:

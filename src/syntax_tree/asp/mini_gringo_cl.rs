@@ -15,44 +15,44 @@ use {
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum PrecomputedTerm {
+pub enum BasicSymbol {
     Infimum,
     Numeral(isize),
     Symbol(String),
     Supremum,
 }
 
-impl PrecomputedTerm {
+impl BasicSymbol {
     pub fn function_constants(&self) -> IndexSet<String> {
         match &self {
-            PrecomputedTerm::Infimum => IndexSet::new(),
-            PrecomputedTerm::Numeral(_) => IndexSet::new(),
-            PrecomputedTerm::Symbol(s) => IndexSet::from([s.clone()]),
-            PrecomputedTerm::Supremum => IndexSet::new(),
+            BasicSymbol::Infimum => IndexSet::new(),
+            BasicSymbol::Numeral(_) => IndexSet::new(),
+            BasicSymbol::Symbol(s) => IndexSet::from([s.clone()]),
+            BasicSymbol::Supremum => IndexSet::new(),
         }
     }
 }
 
-impl_node!(PrecomputedTerm, Format, PrecomputedTermParser);
+impl_node!(BasicSymbol, Format, PrecomputedTermParser);
 
-impl From<asp::mini_gringo::PrecomputedTerm> for PrecomputedTerm {
-    fn from(value: asp::mini_gringo::PrecomputedTerm) -> Self {
+impl From<asp::mini_gringo::BasicSymbol> for BasicSymbol {
+    fn from(value: asp::mini_gringo::BasicSymbol) -> Self {
         match value {
-            asp::mini_gringo::PrecomputedTerm::Infimum => PrecomputedTerm::Infimum,
-            asp::mini_gringo::PrecomputedTerm::Numeral(n) => PrecomputedTerm::Numeral(n),
-            asp::mini_gringo::PrecomputedTerm::Symbol(s) => PrecomputedTerm::Symbol(s),
-            asp::mini_gringo::PrecomputedTerm::Supremum => PrecomputedTerm::Supremum,
+            asp::mini_gringo::BasicSymbol::Infimum => BasicSymbol::Infimum,
+            asp::mini_gringo::BasicSymbol::Numeral(n) => BasicSymbol::Numeral(n),
+            asp::mini_gringo::BasicSymbol::Symbol(s) => BasicSymbol::Symbol(s),
+            asp::mini_gringo::BasicSymbol::Supremum => BasicSymbol::Supremum,
         }
     }
 }
 
-impl From<asp::gringo::PrecomputedTerm> for PrecomputedTerm {
-    fn from(value: asp::gringo::PrecomputedTerm) -> Self {
+impl From<asp::gringo::BasicSymbol> for BasicSymbol {
+    fn from(value: asp::gringo::BasicSymbol) -> Self {
         match value {
-            asp::gringo::PrecomputedTerm::Infimum => PrecomputedTerm::Infimum,
-            asp::gringo::PrecomputedTerm::Numeral(n) => PrecomputedTerm::Numeral(n),
-            asp::gringo::PrecomputedTerm::Symbol(s) => PrecomputedTerm::Symbol(s),
-            asp::gringo::PrecomputedTerm::Supremum => PrecomputedTerm::Supremum,
+            asp::gringo::BasicSymbol::Infimum => BasicSymbol::Infimum,
+            asp::gringo::BasicSymbol::Numeral(n) => BasicSymbol::Numeral(n),
+            asp::gringo::BasicSymbol::Symbol(s) => BasicSymbol::Symbol(s),
+            asp::gringo::BasicSymbol::Supremum => BasicSymbol::Supremum,
         }
     }
 }
@@ -139,7 +139,7 @@ impl From<asp::gringo::BinaryOperator> for BinaryOperator {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
-    PrecomputedTerm(PrecomputedTerm),
+    PrecomputedTerm(BasicSymbol),
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
@@ -905,7 +905,7 @@ impl From<asp::gringo::Program> for Program {
 mod tests {
     use {
         super::{
-            Atom, AtomicFormula, Body, Comparison, Head, PrecomputedTerm, Program, Relation, Rule,
+            Atom, AtomicFormula, Body, Comparison, Head, BasicSymbol, Program, Relation, Rule,
             Term,
         },
         crate::syntax_tree::asp::{
@@ -930,8 +930,8 @@ mod tests {
                     formulas: vec![BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
                         head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
                             Comparison {
-                                lhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())),
-                                rhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol("b".into())),
+                                lhs: Term::PrecomputedTerm(BasicSymbol::Symbol("a".into())),
+                                rhs: Term::PrecomputedTerm(BasicSymbol::Symbol("b".into())),
                                 relation: Relation::NotEqual,
                             },
                         )),

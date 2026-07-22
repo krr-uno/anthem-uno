@@ -14,25 +14,25 @@ use {
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum PrecomputedTerm {
+pub enum BasicSymbol {
     Infimum,
     Numeral(isize),
     Symbol(String),
     Supremum,
 }
 
-impl PrecomputedTerm {
+impl BasicSymbol {
     pub fn function_constants(&self) -> IndexSet<String> {
         match &self {
-            PrecomputedTerm::Infimum => IndexSet::new(),
-            PrecomputedTerm::Numeral(_) => IndexSet::new(),
-            PrecomputedTerm::Symbol(s) => IndexSet::from([s.clone()]),
-            PrecomputedTerm::Supremum => IndexSet::new(),
+            BasicSymbol::Infimum => IndexSet::new(),
+            BasicSymbol::Numeral(_) => IndexSet::new(),
+            BasicSymbol::Symbol(s) => IndexSet::from([s.clone()]),
+            BasicSymbol::Supremum => IndexSet::new(),
         }
     }
 }
 
-impl_node!(PrecomputedTerm, Format, PrecomputedTermParser);
+impl_node!(BasicSymbol, Format, PrecomputedTermParser);
 
 // Potassco User Guide, Anonymous Variables:
 // Unlike a variable name whose recurrences within a rule refer to the same variable,
@@ -84,7 +84,7 @@ impl From<asp::mini_gringo::BinaryOperator> for BinaryOperator {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
-    PrecomputedTerm(PrecomputedTerm),
+    PrecomputedTerm(BasicSymbol),
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
