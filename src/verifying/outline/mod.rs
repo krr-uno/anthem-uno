@@ -76,7 +76,7 @@ pub(crate) trait CheckInternal {
     fn definition(
         &self,
         taken_predicates: &IndexSet<fol::Predicate>,
-    ) -> Result<fol::Predicate, ProofOutlineWarning, ProofOutlineError>;
+    ) -> Result<fol::Predicate, ProofOutlineWarning, Box<ProofOutlineError>>;
 
     // Returns the formula in the RHS of the formula if it is a structurally valid definition, else returns an error
     fn definition_rhs(&self) -> Result<fol::Formula, ProofOutlineWarning, ProofOutlineError>;
@@ -91,7 +91,7 @@ impl CheckInternal for fol::Formula {
     fn definition(
         &self,
         taken_predicates: &IndexSet<fol::Predicate>,
-    ) -> Result<fol::Predicate, ProofOutlineWarning, ProofOutlineError> {
+    ) -> Result<fol::Predicate, ProofOutlineWarning, Box<ProofOutlineError>> {
         match self.clone().unbox() {
             UnboxedFormula::QuantifiedFormula {
                 quantification:
@@ -113,7 +113,9 @@ impl CheckInternal for fol::Formula {
                     let len = variables.len();
                     let uniques: IndexSet<fol::Variable> = IndexSet::from_iter(variables);
                     if uniques.len() < len {
-                        return Err(ProofOutlineError::DuplicatedVariables(self.clone()));
+                        return Err(Box::new(ProofOutlineError::DuplicatedVariables(
+                            self.clone(),
+                        )));
                     }
 
                     let mut terms_as_vars = IndexSet::new();
@@ -123,30 +125,30 @@ impl CheckInternal for fol::Formula {
                                 terms_as_vars.insert(v);
                             }
                             Err(e) => {
-                                return Err(ProofOutlineError::TermsInDefinition {
+                                return Err(Box::new(ProofOutlineError::TermsInDefinition {
                                     term: e,
                                     formula: self.clone(),
-                                });
+                                }));
                             }
                         }
                     }
 
                     // Check variables in quantifications are the same as the terms in the atom
                     if uniques != terms_as_vars {
-                        return Err(ProofOutlineError::DefinedPredicateVariableListMismatch(
-                            self.clone(),
+                        return Err(Box::new(
+                            ProofOutlineError::DefinedPredicateVariableListMismatch(self.clone()),
                         ));
                     }
 
                     // check predicate is totally fresh
                     let predicate = a.predicate();
                     if taken_predicates.contains(&predicate) {
-                        return Err(ProofOutlineError::TakenPredicate(predicate));
+                        return Err(Box::new(ProofOutlineError::TakenPredicate(predicate)));
                     }
 
                     // check RHS has no free variables other than those in uniques
                     if rhs.free_variables().difference(&uniques).next().is_some() {
-                        return Err(ProofOutlineError::FreeRhsVariables(self.clone()));
+                        return Err(Box::new(ProofOutlineError::FreeRhsVariables(self.clone())));
                     }
 
                     // warn the user if the RHS is missing some variable from the quantification
@@ -157,18 +159,22 @@ impl CheckInternal for fol::Formula {
                     // check RHS has no predicates other than taken predicates
                     // this should ensure no recursion through definition sequence
                     if let Some(predicate) = rhs.predicates().difference(taken_predicates).next() {
-                        return Err(ProofOutlineError::UndefinedRhsPredicate {
+                        return Err(Box::new(ProofOutlineError::UndefinedRhsPredicate {
                             definition: self.clone(),
                             predicate: predicate.clone(),
-                        });
+                        }));
                     }
 
                     Ok(WithWarnings::flawless(predicate).preface_warnings(warnings))
                 }
-                _ => Err(ProofOutlineError::MalformedDefinition(self.clone())),
+                _ => Err(Box::new(ProofOutlineError::MalformedDefinition(
+                    self.clone(),
+                ))),
             },
 
-            _ => Err(ProofOutlineError::MalformedDefinition(self.clone())),
+            _ => Err(Box::new(ProofOutlineError::MalformedDefinition(
+                self.clone(),
+            ))),
         }
     }
 
@@ -360,7 +366,7 @@ impl ProofOutline {
         specification: fol::Specification,
         mut taken_predicates: IndexSet<fol::Predicate>,
         placeholders: &IndexMap<String, fol::FunctionConstant>,
-    ) -> Result<Self, ProofOutlineWarning, ProofOutlineError> {
+    ) -> Result<Self, ProofOutlineWarning, Box<ProofOutlineError>> {
         let mut warnings = Vec::new();
 
         let mut forward_lemmas = Vec::new();
@@ -403,7 +409,9 @@ impl ProofOutline {
                     }
                 }
                 fol::Role::Assumption | fol::Role::Spec => {
-                    return Err(ProofOutlineError::AnnotatedFormulaWithInvalidRole(anf));
+                    return Err(Box::new(
+                        ProofOutlineError::AnnotatedFormulaWithInvalidRole(anf),
+                    ));
                 }
             }
         }
@@ -497,7 +505,7 @@ mod tests {
                     arity: 1,
                 }]);
             let formula: fol::Formula = src.parse().unwrap();
-            assert_eq!(formula.definition(&taken_predicates), Err(target))
+            assert_eq!(formula.definition(&taken_predicates), Err(Box::new(target)))
         }
     }
 

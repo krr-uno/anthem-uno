@@ -607,7 +607,7 @@ fn construct_herbrand_formula(
     // Z = c(X1, ..., Xk)
     formulas.push(Formula::AtomicFormula(AtomicFormula::Comparison(
         Comparison {
-            term: GeneralTerm::Variable(z.name.into()),
+            term: GeneralTerm::Variable(z.name),
             guards: vec![Guard {
                 relation: Relation::Equal,
                 term: GeneralTerm::Function(Function {
