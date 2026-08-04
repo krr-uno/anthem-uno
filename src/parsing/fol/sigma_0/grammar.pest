@@ -44,7 +44,7 @@ symbolic_term_eoi = _{ symbolic_term ~ EOI }
 function = { symbolic_constant ~ "$" ~ sort ~ term_tuple }
 function_eoi = _{ function ~ EOI }
 
-general_term = { general_function_constant | integer_term | symbolic_term | general_variable | infimum | supremum }
+general_term = { function | general_function_constant | integer_term | symbolic_term | general_variable | infimum | supremum }
 general_term_eoi = _{ general_term ~ EOI }
     general_variable  = ${ unsorted_variable ~ ("$" ~ general_sort)? }
     general_function_constant = ${ symbolic_constant ~ "$" ~ general_sort }

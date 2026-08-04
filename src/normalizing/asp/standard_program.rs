@@ -13,10 +13,17 @@ fn standardize_term(
 ) -> mini_gringo_cl::Term {
     match term {
         gringo::Term::BasicSymbol(t) => mini_gringo_cl::Term::BasicSymbol(t.into()),
+
         gringo::Term::HerbrandFunction { symbol, terms } => {
-            todo!()
-            //mini_gringo_cl::Term::Herbrand
+            mini_gringo_cl::Term::HerbrandFunction {
+                symbol,
+                terms: terms
+                    .into_iter()
+                    .map(|t| standardize_term(t, taken_variables))
+                    .collect(),
+            }
         }
+
         gringo::Term::Variable(variable) => match variable.name {
             Some(name) => mini_gringo_cl::Term::Variable(mini_gringo_cl::Variable(name)),
             None => {
@@ -25,22 +32,17 @@ fn standardize_term(
                 mini_gringo_cl::Term::Variable(mini_gringo_cl::Variable(name))
             }
         },
-        gringo::Term::UnaryOperation { op, arg } => {
-            let term = standardize_term(*arg, taken_variables);
-            mini_gringo_cl::Term::UnaryOperation {
-                op: op.into(),
-                arg: term.into(),
-            }
-        }
-        gringo::Term::BinaryOperation { op, lhs, rhs } => {
-            let t1 = standardize_term(*lhs, taken_variables);
-            let t2 = standardize_term(*rhs, taken_variables);
-            mini_gringo_cl::Term::BinaryOperation {
-                op: op.into(),
-                lhs: t1.into(),
-                rhs: t2.into(),
-            }
-        }
+
+        gringo::Term::UnaryOperation { op, arg } => mini_gringo_cl::Term::UnaryOperation {
+            op: op.into(),
+            arg: standardize_term(*arg, taken_variables).into(),
+        },
+
+        gringo::Term::BinaryOperation { op, lhs, rhs } => mini_gringo_cl::Term::BinaryOperation {
+            op: op.into(),
+            lhs: standardize_term(*lhs, taken_variables).into(),
+            rhs: standardize_term(*rhs, taken_variables).into(),
+        },
     }
 }
 
@@ -177,6 +179,7 @@ mod tests {
             ("(_+_)/_", "(V+V1)/V2"),
             ("_+1", "V+1"),
             ("_.._a", "V.._a"),
+            ("f(a,_,_)", "f(a,V,V1)"),
         ] {
             let src = standardize_term(src.parse().unwrap(), &mut IndexSet::new());
             let target = target.parse().unwrap();

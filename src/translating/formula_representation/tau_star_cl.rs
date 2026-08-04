@@ -612,7 +612,7 @@ fn construct_herbrand_formula(
                 relation: Relation::Equal,
                 term: GeneralTerm::Function(Function {
                     function_symbol: symbol,
-                    sort: Sort::General,
+                    sort: Sort::Symbol,
                     terms: fresh_var_names
                         .iter()
                         .map(|n| GeneralTerm::Variable(n.into()))
@@ -1201,9 +1201,7 @@ mod tests {
     #[test]
     fn test_val() {
         for (term, var, target) in [
-            (
-                "f(a)", "Z1", "exists X$g (a = X$g and Z1$g = f$s(X$g))",
-            ),
+            ("f(a)", "Z1", "exists X$g (X$g = a and Z1$g = f$s(X$g))"),
             (
                 "X + 1",
                 "Z1",

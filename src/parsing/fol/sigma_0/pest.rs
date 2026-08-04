@@ -203,6 +203,7 @@ impl PestParser for GeneralTermParser {
             internal::Rule::general_term => Self::translate_pairs(pair.into_inner()),
             internal::Rule::infimum => GeneralTerm::Infimum,
             internal::Rule::supremum => GeneralTerm::Supremum,
+            internal::Rule::function => GeneralTerm::Function(FunctionParser::translate_pair(pair)),
             internal::Rule::general_function_constant => match pair.into_inner().next() {
                 Some(pair) if pair.as_rule() == internal::Rule::symbolic_constant => {
                     GeneralTerm::FunctionConstant(pair.as_str().into())
@@ -866,7 +867,7 @@ mod tests {
             parsing::TestedParser,
             syntax_tree::fol::sigma_0::{
                 AnnotatedFormula, Atom, AtomicFormula, BinaryConnective, BinaryOperator,
-                Comparison, Direction, Formula, GeneralTerm, Guard, IntegerTerm,
+                Comparison, Direction, Formula, Function, GeneralTerm, Guard, IntegerTerm,
                 PlaceholderDeclaration, Predicate, Quantification, Quantifier, Relation, Role,
                 Sort, Specification, SymbolicTerm, Theory, UnaryConnective, UnaryOperator,
                 UserGuide, UserGuideEntry, Variable,
@@ -961,6 +962,22 @@ mod tests {
                 ("#inf", GeneralTerm::Infimum),
                 ("#sup", GeneralTerm::Supremum),
                 ("a$g", GeneralTerm::FunctionConstant("a".into())),
+                (
+                    "f$g(a)",
+                    GeneralTerm::Function(Function {
+                        function_symbol: "f".into(),
+                        sort: Sort::General,
+                        terms: vec![GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol("a".into()))],
+                    }),
+                ),
+                (
+                    "f$s(a)",
+                    GeneralTerm::Function(Function {
+                        function_symbol: "f".into(),
+                        sort: Sort::Symbol,
+                        terms: vec![GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol("a".into()))],
+                    }),
+                ),
                 ("1", GeneralTerm::IntegerTerm(IntegerTerm::Numeral(1))),
                 ("(1)", GeneralTerm::IntegerTerm(IntegerTerm::Numeral(1))),
                 ("-1", GeneralTerm::IntegerTerm(IntegerTerm::Numeral(-1))),
