@@ -35,11 +35,11 @@ impl PestParser for BasicSymbolParser {
 
     type InternalParser = internal::Parser;
     type Rule = internal::Rule;
-    const RULE: internal::Rule = internal::Rule::precomputed_term_eoi;
+    const RULE: internal::Rule = internal::Rule::basic_symbol_eoi;
 
     fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
         match pair.as_rule() {
-            internal::Rule::precomputed_term => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::basic_symbol => Self::translate_pairs(pair.into_inner()),
             internal::Rule::infimum => BasicSymbol::Infimum,
             internal::Rule::integer => BasicSymbol::Numeral(pair.as_str().parse().unwrap()),
             internal::Rule::symbol => BasicSymbol::Symbol(pair.as_str().into()),
@@ -124,11 +124,23 @@ impl PestParser for TermParser {
         internal::PRATT_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 internal::Rule::term => TermParser::translate_pair(primary),
+                internal::Rule::herbrand_function => {
+                    let mut pairs = primary.into_inner();
+
+                    let symbol = pairs
+                        .next()
+                        .unwrap_or_else(|| Self::report_missing_pair())
+                        .as_str()
+                        .into();
+                    let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+
+                    Term::HerbrandFunction { symbol, terms }
+                }
                 internal::Rule::absolute_valued_term => Term::UnaryOperation {
                     op: UnaryOperator::AbsoluteValue,
                     arg: TermParser::translate_pairs(primary.into_inner()).into(),
                 },
-                internal::Rule::precomputed_term => {
+                internal::Rule::basic_symbol => {
                     Term::BasicSymbol(BasicSymbolParser::translate_pair(primary))
                 }
                 internal::Rule::variable => Term::Variable(VariableParser::translate_pair(primary)),
@@ -578,7 +590,7 @@ mod tests {
     };
 
     #[test]
-    fn parse_precomputed_term() {
+    fn parse_basic_symbol() {
         BasicSymbolParser
             .should_parse_into([
                 ("#inf", BasicSymbol::Infimum),
@@ -725,6 +737,42 @@ mod tests {
                             .into(),
                         }
                         .into(),
+                    },
+                ),
+                (
+                    "c(1, 2)",
+                    Term::HerbrandFunction {
+                        symbol: "c".to_string(),
+                        terms: vec![
+                            Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                        ],
+                    },
+                ),
+                (
+                    "f(f(X))",
+                    Term::HerbrandFunction {
+                        symbol: "f".to_string(),
+                        terms: vec![Term::HerbrandFunction {
+                            symbol: "f".to_string(),
+                            terms: vec![Term::Variable(Variable {
+                                name: Some("X".into()),
+                            })],
+                        }],
+                    },
+                ),
+                (
+                    "charlie(1, 2, frank(1))",
+                    Term::HerbrandFunction {
+                        symbol: "charlie".to_string(),
+                        terms: vec![
+                            Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                            Term::HerbrandFunction {
+                                symbol: "frank".to_string(),
+                                terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1)).into()],
+                            },
+                        ],
                     },
                 ),
                 (
@@ -990,6 +1038,18 @@ mod tests {
                         rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                     },
                 ),
+                (
+                    "f(a) + 1",
+                    Term::BinaryOperation {
+                        op: BinaryOperator::Add,
+                        lhs: Term::HerbrandFunction {
+                            symbol: "f".to_string(),
+                            terms: vec![Term::BasicSymbol(BasicSymbol::Symbol("a".into()))],
+                        }
+                        .into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                    },
+                ),
             ])
             .should_reject([
                 "1-",
@@ -1070,6 +1130,19 @@ mod tests {
                         predicate_symbol: "p".into(),
                         terms: vec![
                             Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)),
+                        ],
+                    },
+                ),
+                (
+                    "p(p(1), 2)",
+                    Atom {
+                        predicate_symbol: "p".into(),
+                        terms: vec![
+                            Term::HerbrandFunction {
+                                symbol: "p".into(),
+                                terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1))],
+                            },
                             Term::BasicSymbol(BasicSymbol::Numeral(2)),
                         ],
                     },
@@ -1488,6 +1561,36 @@ mod tests {
                             terms: vec![],
                         }),
                         body: Body { formulas: vec![] },
+                    },
+                ),
+                (
+                    "a :- p(f(a)).",
+                    Rule {
+                        head: Head::Basic(Atom {
+                            predicate_symbol: "a".into(),
+                            terms: vec![],
+                        }),
+                        body: Body {
+                            formulas: vec![BodyLiteral::GfiveConditionalLiteral(
+                                ConditionalLiteral {
+                                    head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(
+                                        Literal {
+                                            sign: Sign::NoSign,
+                                            atom: Atom {
+                                                predicate_symbol: "p".into(),
+                                                terms: vec![Term::HerbrandFunction {
+                                                    symbol: "f".into(),
+                                                    terms: vec![Term::BasicSymbol(
+                                                        BasicSymbol::Symbol("a".into()),
+                                                    )],
+                                                }],
+                                            },
+                                        },
+                                    )),
+                                    conditions: ConditionalBody { formulas: vec![] },
+                                },
+                            )],
+                        },
                     },
                 ),
             ])

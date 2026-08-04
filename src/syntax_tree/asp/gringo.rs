@@ -86,6 +86,10 @@ impl From<asp::mini_gringo::BinaryOperator> for BinaryOperator {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
     BasicSymbol(BasicSymbol),
+    HerbrandFunction {
+        symbol: String,
+        terms: Vec<Term>,
+    },
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
@@ -101,8 +105,28 @@ pub enum Term {
 impl_node!(Term, Format, TermParser);
 
 impl Term {
-    pub fn precomputed(&self) -> bool {
+    pub fn ground(&self) -> bool {
         self.variables().is_empty()
+    }
+
+    pub fn contains_arithmetic(&self) -> bool {
+        match &self {
+            Term::BasicSymbol(_) | Term::Variable(_) => false,
+            Term::HerbrandFunction { terms, .. } => {
+                let mut flag = false;
+                for term in terms {
+                    if term.contains_arithmetic() {
+                        flag = true;
+                    }
+                }
+                flag
+            }
+            Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
+        }
+    }
+
+    pub fn precomputed(&self) -> bool {
+        self.ground() && !self.contains_arithmetic()
     }
 
     pub fn variables(&self) -> IndexSet<Variable> {
@@ -113,6 +137,13 @@ impl Term {
             Term::BinaryOperation { lhs, rhs, .. } => {
                 let mut vars = lhs.variables();
                 vars.extend(rhs.variables());
+                vars
+            }
+            Term::HerbrandFunction { terms, .. } => {
+                let mut vars = IndexSet::new();
+                for term in terms {
+                    vars.extend(term.variables());
+                }
                 vars
             }
         }
@@ -126,6 +157,13 @@ impl Term {
             Term::BinaryOperation { lhs, rhs, .. } => {
                 let mut functions = lhs.function_constants();
                 functions.extend(rhs.function_constants());
+                functions
+            }
+            Term::HerbrandFunction { terms, .. } => {
+                let mut functions = IndexSet::new();
+                for term in terms {
+                    functions.extend(term.function_constants());
+                }
                 functions
             }
         }

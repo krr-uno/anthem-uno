@@ -140,7 +140,11 @@ impl From<asp::gringo::BinaryOperator> for BinaryOperator {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
-    BasicTerm(BasicSymbol),
+    BasicSymbol(BasicSymbol),
+    HerbrandFunction {
+        symbol: String,
+        terms: Vec<Term>,
+    },
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
@@ -156,13 +160,33 @@ pub enum Term {
 impl_node!(Term, Format, TermParser);
 
 impl Term {
-    pub fn precomputed(&self) -> bool {
+    pub fn ground(&self) -> bool {
         self.variables().is_empty()
+    }
+
+    pub fn contains_arithmetic(&self) -> bool {
+        match &self {
+            Term::BasicSymbol(_) | Term::Variable(_) => false,
+            Term::HerbrandFunction { terms, .. } => {
+                let mut flag = false;
+                for term in terms {
+                    if term.contains_arithmetic() {
+                        flag = true;
+                    }
+                }
+                flag
+            }
+            Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
+        }
+    }
+
+    pub fn precomputed(&self) -> bool {
+        self.ground() && !self.contains_arithmetic()
     }
 
     pub fn variables(&self) -> IndexSet<Variable> {
         match &self {
-            Term::BasicTerm(_) => IndexSet::new(),
+            Term::BasicSymbol(_) => IndexSet::new(),
             Term::Variable(v) => IndexSet::from([v.clone()]),
             Term::UnaryOperation { arg, .. } => arg.variables(),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -170,17 +194,31 @@ impl Term {
                 vars.extend(rhs.variables());
                 vars
             }
+            Term::HerbrandFunction { terms, .. } => {
+                let mut vars = IndexSet::new();
+                for term in terms {
+                    vars.extend(term.variables());
+                }
+                vars
+            }
         }
     }
 
     pub fn function_constants(&self) -> IndexSet<String> {
         match &self {
-            Term::BasicTerm(t) => t.function_constants(),
+            Term::BasicSymbol(t) => t.function_constants(),
             Term::Variable(_) => IndexSet::new(),
             Term::UnaryOperation { arg, .. } => arg.function_constants(),
             Term::BinaryOperation { lhs, rhs, .. } => {
                 let mut functions = lhs.function_constants();
                 functions.extend(rhs.function_constants());
+                functions
+            }
+            Term::HerbrandFunction { terms, .. } => {
+                let mut functions = IndexSet::new();
+                for term in terms {
+                    functions.extend(term.function_constants());
+                }
                 functions
             }
         }
@@ -190,7 +228,7 @@ impl Term {
 impl From<asp::mini_gringo::Term> for Term {
     fn from(value: asp::mini_gringo::Term) -> Self {
         match value {
-            asp::mini_gringo::Term::BasicSymbol(t) => Term::BasicTerm(t.into()),
+            asp::mini_gringo::Term::BasicSymbol(t) => Term::BasicSymbol(t.into()),
             asp::mini_gringo::Term::Variable(v) => Term::Variable(v.into()),
             asp::mini_gringo::Term::UnaryOperation { op, arg } => {
                 let term = Term::from(*arg);
@@ -934,8 +972,8 @@ mod tests {
                     formulas: vec![BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
                         head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
                             Comparison {
-                                lhs: Term::BasicTerm(BasicSymbol::Symbol("a".into())),
-                                rhs: Term::BasicTerm(BasicSymbol::Symbol("b".into())),
+                                lhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())),
+                                rhs: Term::BasicSymbol(BasicSymbol::Symbol("b".into())),
                                 relation: Relation::NotEqual,
                             },
                         )),

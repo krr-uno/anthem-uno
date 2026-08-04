@@ -5,13 +5,22 @@ use crate::syntax_tree::asp::mini_gringo_cl::{
 
 impl Term {
     pub fn is_precomputed(&self) -> bool {
-        matches!(self, Term::BasicTerm(_))
+        matches!(self, Term::BasicSymbol(_))
     }
 
     pub fn contains_arithmetic_operations(&self) -> bool {
         match self {
-            Term::BasicTerm(_) | Term::Variable(_) => false,
+            Term::BasicSymbol(_) | Term::Variable(_) => false,
             Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
+            Term::HerbrandFunction { terms, .. } => {
+                let mut flag = false;
+                for term in terms {
+                    if term.contains_arithmetic_operations() {
+                        flag = true;
+                    }
+                }
+                flag
+            }
         }
     }
 }

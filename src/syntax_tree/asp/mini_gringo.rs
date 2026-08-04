@@ -140,7 +140,7 @@ impl TryFrom<mini_gringo_cl::Term> for Term {
 
     fn try_from(value: mini_gringo_cl::Term) -> Result<Self, Self::Error> {
         match value {
-            mini_gringo_cl::Term::BasicTerm(t) => Ok(Term::BasicSymbol(t.into())),
+            mini_gringo_cl::Term::BasicSymbol(t) => Ok(Term::BasicSymbol(t.into())),
             mini_gringo_cl::Term::Variable(v) => Ok(Term::Variable(v.into())),
             mini_gringo_cl::Term::UnaryOperation {
                 op: op_cl,
@@ -167,6 +167,9 @@ impl TryFrom<mini_gringo_cl::Term> for Term {
                     lhs: lhs_mg.into(),
                     rhs: rhs_mg.into(),
                 })
+            }
+            mini_gringo_cl::Term::HerbrandFunction { .. } => {
+                Err("herbrand functions unsupported in mini-gringo")
             }
         }
     }

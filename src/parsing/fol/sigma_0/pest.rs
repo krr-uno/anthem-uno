@@ -2,7 +2,7 @@ use crate::{
     parsing::PestParser,
     syntax_tree::fol::sigma_0::{
         AnnotatedFormula, Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison,
-        Direction, Formula, FunctionConstant, GeneralTerm, Guard, IntegerTerm,
+        Direction, Formula, Function, FunctionConstant, GeneralTerm, Guard, IntegerTerm,
         PlaceholderDeclaration, Predicate, Quantification, Quantifier, Relation, Role, Sort,
         Specification, SymbolicTerm, Theory, UnaryConnective, UnaryOperator, UserGuide,
         UserGuideEntry, Variable,
@@ -150,6 +150,41 @@ impl PestParser for SymbolicTermParser {
                 None => Self::report_missing_pair(),
             },
             _ => Self::report_unexpected_pair(pair),
+        }
+    }
+}
+
+pub struct FunctionParser;
+
+impl PestParser for FunctionParser {
+    type Node = Function;
+
+    type InternalParser = internal::Parser;
+    type Rule = internal::Rule;
+    const RULE: Self::Rule = internal::Rule::function_eoi;
+
+    fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
+        if pair.as_rule() != internal::Rule::function {
+            Self::report_unexpected_pair(pair)
+        }
+
+        let mut pairs = pair.into_inner();
+
+        let function_symbol = pairs
+            .next()
+            .unwrap_or_else(|| Self::report_missing_pair())
+            .as_str()
+            .into();
+
+        let sort =
+            SortParser::translate_pair(pairs.next().unwrap_or_else(|| Self::report_missing_pair()));
+
+        let terms: Vec<_> = pairs.map(GeneralTermParser::translate_pair).collect();
+
+        Function {
+            function_symbol,
+            sort,
+            terms,
         }
     }
 }

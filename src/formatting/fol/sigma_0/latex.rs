@@ -5,10 +5,10 @@ use {
             Node,
             fol::sigma_0::{
                 AnnotatedFormula, Atom, AtomicFormula, BinaryConnective, BinaryOperator,
-                Comparison, Direction, Formula, FunctionConstant, GeneralTerm, Guard, IntegerTerm,
-                PlaceholderDeclaration, Predicate, Quantification, Quantifier, Relation, Role,
-                Sort, Specification, SymbolicTerm, Theory, UnaryConnective, UnaryOperator,
-                UserGuide, UserGuideEntry, Variable,
+                Comparison, Direction, Formula, Function, FunctionConstant, GeneralTerm, Guard,
+                IntegerTerm, PlaceholderDeclaration, Predicate, Quantification, Quantifier,
+                Relation, Role, Sort, Specification, SymbolicTerm, Theory, UnaryConnective,
+                UnaryOperator, UserGuide, UserGuideEntry, Variable,
             },
         },
     },
@@ -96,6 +96,25 @@ impl Display for Format<'_, SymbolicTerm> {
     }
 }
 
+impl Display for Format<'_, Function> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let symbol = &self.0.function_symbol;
+        let sort = &self.0.sort;
+        let terms = &self.0.terms;
+
+        write!(f, "{symbol}\\${sort}")?;
+
+        let mut iter = terms.iter().map(Format);
+        write!(f, "({}", iter.next().unwrap())?;
+        for term in iter {
+            write!(f, ", {term}")?;
+        }
+        write!(f, ")")?;
+
+        Ok(())
+    }
+}
+
 impl Display for Format<'_, GeneralTerm> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
@@ -105,6 +124,7 @@ impl Display for Format<'_, GeneralTerm> {
             GeneralTerm::Variable(v) => write!(f, "{v}"),
             GeneralTerm::IntegerTerm(t) => Format(t).fmt(f),
             GeneralTerm::SymbolicTerm(t) => Format(t).fmt(f),
+            GeneralTerm::Function(func) => Format(func).fmt(f),
         }
     }
 }

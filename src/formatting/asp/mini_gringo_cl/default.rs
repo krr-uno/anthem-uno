@@ -59,8 +59,11 @@ impl Display for Format<'_, BinaryOperator> {
 impl Precedence for Format<'_, Term> {
     fn precedence(&self) -> usize {
         match self.0 {
-            Term::BasicTerm(BasicSymbol::Numeral(1..)) => 1,
-            Term::UnaryOperation { .. } | Term::BasicTerm(_) | Term::Variable(_) => 0,
+            Term::BasicSymbol(BasicSymbol::Numeral(1..)) => 1,
+            Term::UnaryOperation { .. }
+            | Term::BasicSymbol(_)
+            | Term::HerbrandFunction { .. }
+            | Term::Variable(_) => 0,
             Term::BinaryOperation {
                 op:
                     BinaryOperator::Multiply
@@ -92,7 +95,9 @@ impl Precedence for Format<'_, Term> {
                 BinaryOperator::Interval => write!(f, "{}", Format(op)),
                 _ => write!(f, " {} ", Format(op)),
             },
-            Term::BasicTerm(_) | Term::Variable(_) => unreachable!(),
+            Term::BasicSymbol(_) | Term::HerbrandFunction { .. } | Term::Variable(_) => {
+                unreachable!()
+            }
         }
     }
 }
@@ -100,7 +105,7 @@ impl Precedence for Format<'_, Term> {
 impl Display for Format<'_, Term> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
-            Term::BasicTerm(c) => Format(c).fmt(f),
+            Term::BasicSymbol(c) => Format(c).fmt(f),
             Term::Variable(v) => Format(v).fmt(f),
             Term::UnaryOperation {
                 op: UnaryOperator::Negative,
@@ -118,6 +123,18 @@ impl Display for Format<'_, Term> {
             ),
             Term::BinaryOperation { lhs, rhs, .. } => {
                 self.fmt_binary(Format(lhs.as_ref()), Format(rhs.as_ref()), f)
+            }
+            Term::HerbrandFunction { symbol, terms } => {
+                write!(f, "{symbol}")?;
+
+                let mut iter = terms.iter().map(Format);
+                write!(f, "({}", iter.next().unwrap())?;
+                for term in iter {
+                    write!(f, ", {term}")?;
+                }
+                write!(f, ")")?;
+
+                Ok(())
             }
         }
     }
@@ -333,7 +350,7 @@ mod tests {
     #[test]
     fn format_term() {
         assert_eq!(
-            Format(&Term::BasicTerm(BasicSymbol::Numeral(42))).to_string(),
+            Format(&Term::BasicSymbol(BasicSymbol::Numeral(42))).to_string(),
             "42"
         );
 
@@ -345,7 +362,7 @@ mod tests {
         assert_eq!(
             Format(&Term::UnaryOperation {
                 op: UnaryOperator::AbsoluteValue,
-                arg: Term::BasicTerm(BasicSymbol::Numeral(1)).into(),
+                arg: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
             })
             .to_string(),
             "|1|"
@@ -354,11 +371,11 @@ mod tests {
         assert_eq!(
             Format(&Term::BinaryOperation {
                 op: BinaryOperator::Add,
-                lhs: Term::BasicTerm(BasicSymbol::Numeral(1)).into(),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                 rhs: Term::BinaryOperation {
                     op: BinaryOperator::Multiply,
-                    lhs: Term::BasicTerm(BasicSymbol::Numeral(2)).into(),
-                    rhs: Term::BasicTerm(BasicSymbol::Numeral(3)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                 }
                 .into(),
             })
@@ -369,11 +386,11 @@ mod tests {
         assert_eq!(
             Format(&Term::BinaryOperation {
                 op: BinaryOperator::Multiply,
-                lhs: Term::BasicTerm(BasicSymbol::Numeral(1)).into(),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                 rhs: Term::BinaryOperation {
                     op: BinaryOperator::Add,
-                    lhs: Term::BasicTerm(BasicSymbol::Numeral(2)).into(),
-                    rhs: Term::BasicTerm(BasicSymbol::Numeral(3)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                 }
                 .into(),
             })
@@ -384,11 +401,11 @@ mod tests {
         assert_eq!(
             Format(&Term::BinaryOperation {
                 op: BinaryOperator::Add,
-                lhs: Term::BasicTerm(BasicSymbol::Numeral(1)).into(),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                 rhs: Term::BinaryOperation {
                     op: BinaryOperator::Add,
-                    lhs: Term::BasicTerm(BasicSymbol::Numeral(2)).into(),
-                    rhs: Term::BasicTerm(BasicSymbol::Numeral(3)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                 }
                 .into(),
             })
@@ -401,11 +418,11 @@ mod tests {
                 op: BinaryOperator::Add,
                 lhs: Term::BinaryOperation {
                     op: BinaryOperator::Add,
-                    lhs: Term::BasicTerm(BasicSymbol::Numeral(1)).into(),
-                    rhs: Term::BasicTerm(BasicSymbol::Numeral(2)).into(),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                 }
                 .into(),
-                rhs: Term::BasicTerm(BasicSymbol::Numeral(3)).into(),
+                rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
             })
             .to_string(),
             "1 + 2 + 3"
@@ -426,7 +443,7 @@ mod tests {
         assert_eq!(
             Format(&Atom {
                 predicate_symbol: "p".into(),
-                terms: vec![Term::BasicTerm(BasicSymbol::Numeral(1))],
+                terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1))],
             })
             .to_string(),
             "p(1)"
@@ -436,8 +453,8 @@ mod tests {
             Format(&Atom {
                 predicate_symbol: "p".into(),
                 terms: vec![
-                    Term::BasicTerm(BasicSymbol::Numeral(1)),
-                    Term::BasicTerm(BasicSymbol::Numeral(2))
+                    Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                    Term::BasicSymbol(BasicSymbol::Numeral(2))
                 ],
             })
             .to_string(),
@@ -483,7 +500,7 @@ mod tests {
             Format(&Comparison {
                 relation: Relation::Equal,
                 lhs: Term::Variable(Variable("I".into())),
-                rhs: Term::BasicTerm(BasicSymbol::Numeral(1))
+                rhs: Term::BasicSymbol(BasicSymbol::Numeral(1))
             })
             .to_string(),
             "I = 1"
@@ -507,8 +524,8 @@ mod tests {
         assert_eq!(
             Format(&AtomicFormula::Comparison(Comparison {
                 relation: Relation::NotEqual,
-                lhs: Term::BasicTerm(BasicSymbol::Numeral(1)),
-                rhs: Term::BasicTerm(BasicSymbol::Numeral(2))
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                rhs: Term::BasicSymbol(BasicSymbol::Numeral(2))
             }))
             .to_string(),
             "1 != 2"
@@ -560,7 +577,7 @@ mod tests {
                             Comparison {
                                 relation: Relation::Less,
                                 lhs: Term::Variable(Variable("X".into())),
-                                rhs: Term::BasicTerm(BasicSymbol::Numeral(10))
+                                rhs: Term::BasicSymbol(BasicSymbol::Numeral(10))
                             }
                         )),
                         conditions: ConditionalBody { formulas: vec![] },
