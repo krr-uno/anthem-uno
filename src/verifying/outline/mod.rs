@@ -79,12 +79,12 @@ pub(crate) trait CheckInternal {
     ) -> Result<fol::Predicate, ProofOutlineWarning, Box<ProofOutlineError>>;
 
     // Returns the formula in the RHS of the formula if it is a structurally valid definition, else returns an error
-    fn definition_rhs(&self) -> Result<fol::Formula, ProofOutlineWarning, ProofOutlineError>;
+    fn definition_rhs(&self) -> Result<fol::Formula, ProofOutlineWarning, Box<ProofOutlineError>>;
 
     // Returns the base case and inductive step formulas if the formula is a valid inductive lemma, else returns an error
     fn inductive_lemma(
         self,
-    ) -> Result<(fol::Formula, fol::Formula), ProofOutlineWarning, ProofOutlineError>;
+    ) -> Result<(fol::Formula, fol::Formula), ProofOutlineWarning, Box<ProofOutlineError>>;
 }
 
 impl CheckInternal for fol::Formula {
@@ -178,7 +178,7 @@ impl CheckInternal for fol::Formula {
         }
     }
 
-    fn definition_rhs(&self) -> Result<fol::Formula, ProofOutlineWarning, ProofOutlineError> {
+    fn definition_rhs(&self) -> Result<fol::Formula, ProofOutlineWarning, Box<ProofOutlineError>> {
         match self.clone().unbox() {
             UnboxedFormula::QuantifiedFormula {
                 quantification:
@@ -194,13 +194,15 @@ impl CheckInternal for fol::Formula {
                     },
             } => Ok(WithWarnings::flawless(*rhs)),
 
-            _ => Err(ProofOutlineError::MalformedDefinition(self.clone())),
+            _ => Err(Box::new(ProofOutlineError::MalformedDefinition(
+                self.clone(),
+            ))),
         }
     }
 
     fn inductive_lemma(
         self,
-    ) -> Result<(fol::Formula, fol::Formula), ProofOutlineWarning, ProofOutlineError> {
+    ) -> Result<(fol::Formula, fol::Formula), ProofOutlineWarning, Box<ProofOutlineError>> {
         let original = self.clone();
         match self.unbox() {
             UnboxedFormula::QuantifiedFormula {
@@ -220,11 +222,15 @@ impl CheckInternal for fol::Formula {
                     fol::Comparison { term, guards },
                 )) => {
                     if guards.len() != 1 {
-                        return Err(ProofOutlineError::MalformedInductiveAntecedent(original));
+                        return Err(Box::new(ProofOutlineError::MalformedInductiveAntecedent(
+                            original,
+                        )));
                     }
                     let varset: IndexSet<fol::Variable> = IndexSet::from_iter(variables.clone());
                     if varset != rhs.free_variables() {
-                        return Err(ProofOutlineError::MalformedInductiveVariables(original));
+                        return Err(Box::new(ProofOutlineError::MalformedInductiveVariables(
+                            original,
+                        )));
                     }
 
                     let induction_variable = match term {
@@ -234,7 +240,11 @@ impl CheckInternal for fol::Formula {
                                 sort: fol::Sort::Integer,
                             }
                         }
-                        _ => return Err(ProofOutlineError::MalformedInductiveTerm(original)),
+                        _ => {
+                            return Err(Box::new(ProofOutlineError::MalformedInductiveTerm(
+                                original,
+                            )));
+                        }
                     };
 
                     let guard = guards[0].clone();
@@ -276,14 +286,22 @@ impl CheckInternal for fol::Formula {
 
                                 Ok(WithWarnings::flawless((base_case, inductive_step)))
                             }
-                            _ => Err(ProofOutlineError::MalformedInductiveLemma(original)),
+                            _ => Err(Box::new(ProofOutlineError::MalformedInductiveLemma(
+                                original,
+                            ))),
                         },
-                        _ => Err(ProofOutlineError::MalformedInductiveLemma(original)),
+                        _ => Err(Box::new(ProofOutlineError::MalformedInductiveLemma(
+                            original,
+                        ))),
                     }
                 }
-                _ => Err(ProofOutlineError::MalformedInductiveLemma(original)),
+                _ => Err(Box::new(ProofOutlineError::MalformedInductiveLemma(
+                    original,
+                ))),
             },
-            _ => Err(ProofOutlineError::MalformedInductiveLemma(original)),
+            _ => Err(Box::new(ProofOutlineError::MalformedInductiveLemma(
+                original,
+            ))),
         }
     }
 }
@@ -334,6 +352,12 @@ pub enum ProofOutlineError {
     MalformedDefinition(fol::Formula),
     #[error("the following annotated formula cannot be converted to a general lemma: `{0}`")]
     InvalidRoleForGeneralLemma(fol::AnnotatedFormula),
+}
+
+impl From<Box<ProofOutlineError>> for ProofOutlineError {
+    fn from(value: Box<ProofOutlineError>) -> Self {
+        *value
+    }
 }
 
 pub struct ProofOutline {
@@ -573,7 +597,7 @@ mod tests {
             ),
         ] {
             let formula: fol::Formula = src.parse().unwrap();
-            assert_eq!(formula.inductive_lemma(), Err(target))
+            assert_eq!(formula.inductive_lemma(), Err(Box::new(target)))
         }
     }
 }
