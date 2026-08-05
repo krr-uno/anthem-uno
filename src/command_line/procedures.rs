@@ -7,9 +7,9 @@ use {
         command_line::{
             Program,
             arguments::{
-                Arguments, Command, Equivalence, Fragment, Output, ParseAs, Property,
-                Arguments, Command, Dialect, Equivalence, Normalization, Output, ParseAs, Property,
-                SimplificationPortfolio, SimplificationStrategy, Translation, Visualization,
+                Arguments, Command, Equivalence, Fragment, Normalization, Output, ParseAs,
+                Property, SimplificationPortfolio, SimplificationStrategy, Translation,
+                Visualization,
             },
             files::Files,
         },

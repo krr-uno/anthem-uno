@@ -73,6 +73,12 @@ pub enum StrongEquivalenceTaskError {
     ProofOutlineContainsDefinition(fol::AnnotatedFormula),
 }
 
+impl From<Box<ProofOutlineError>> for StrongEquivalenceTaskError {
+    fn from(value: Box<ProofOutlineError>) -> Self {
+        StrongEquivalenceTaskError::ProofOutlineError(*value)
+    }
+}
+
 impl Display for StrongEquivalenceTaskError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

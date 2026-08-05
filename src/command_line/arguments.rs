@@ -176,6 +176,12 @@ pub enum Fragment {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Normalization {
+    #[default]
+    NumericNormal,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Backend {
     #[default]
     Vampire,
