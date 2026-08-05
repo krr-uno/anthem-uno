@@ -1,8 +1,7 @@
 use {
     crate::{
-        formatting::asp::mini_gringo_cl::default::Format,
-        normalizing::asp::standard_program::standardize_rule,
-        parsing::asp::mini_gringo_cl::pest::{
+        formatting::asp::gringo::default::Format,
+        parsing::asp::gringo::pest::{
             AtomParser, AtomicFormulaParser, BasicSymbolParser, BinaryOperatorParser,
             BodyLiteralParser, BodyParser, ComparisonParser, ConditionalBodyParser,
             ConditionalHeadParser, HeadParser, LiteralParser, PredicateParser, ProgramParser,
@@ -36,38 +35,16 @@ impl BasicSymbol {
 
 impl_node!(BasicSymbol, Format, BasicSymbolParser);
 
-impl From<asp::mini_gringo::BasicSymbol> for BasicSymbol {
-    fn from(value: asp::mini_gringo::BasicSymbol) -> Self {
-        match value {
-            asp::mini_gringo::BasicSymbol::Infimum => BasicSymbol::Infimum,
-            asp::mini_gringo::BasicSymbol::Numeral(n) => BasicSymbol::Numeral(n),
-            asp::mini_gringo::BasicSymbol::Symbol(s) => BasicSymbol::Symbol(s),
-            asp::mini_gringo::BasicSymbol::Supremum => BasicSymbol::Supremum,
-        }
-    }
-}
-
-impl From<asp::gringo::BasicSymbol> for BasicSymbol {
-    fn from(value: asp::gringo::BasicSymbol) -> Self {
-        match value {
-            asp::gringo::BasicSymbol::Infimum => BasicSymbol::Infimum,
-            asp::gringo::BasicSymbol::Numeral(n) => BasicSymbol::Numeral(n),
-            asp::gringo::BasicSymbol::Symbol(s) => BasicSymbol::Symbol(s),
-            asp::gringo::BasicSymbol::Supremum => BasicSymbol::Supremum,
-        }
-    }
-}
-
+// Potassco User Guide, Anonymous Variables:
+// Unlike a variable name whose recurrences within a rule refer to the same variable,
+// the token ‘_’ (not followed by any letter) stands for an anonymous variable that does not recur anywhere.
+// (One can view this as if a new variable name is invented on each occurrence of ‘_’.)
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Variable(pub String);
+pub struct Variable {
+    pub name: Option<String>,
+}
 
 impl_node!(Variable, Format, VariableParser);
-
-impl From<asp::mini_gringo::Variable> for Variable {
-    fn from(value: asp::mini_gringo::Variable) -> Self {
-        Variable(value.0)
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum UnaryOperator {
@@ -76,23 +53,6 @@ pub enum UnaryOperator {
 }
 
 impl_node!(UnaryOperator, Format, UnaryOperatorParser);
-
-impl From<asp::mini_gringo::UnaryOperator> for UnaryOperator {
-    fn from(value: asp::mini_gringo::UnaryOperator) -> Self {
-        match value {
-            asp::mini_gringo::UnaryOperator::Negative => UnaryOperator::Negative,
-        }
-    }
-}
-
-impl From<asp::gringo::UnaryOperator> for UnaryOperator {
-    fn from(value: asp::gringo::UnaryOperator) -> Self {
-        match value {
-            asp::gringo::UnaryOperator::Negative => UnaryOperator::Negative,
-            asp::gringo::UnaryOperator::AbsoluteValue => UnaryOperator::AbsoluteValue,
-        }
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BinaryOperator {
@@ -119,21 +79,6 @@ impl From<asp::mini_gringo::BinaryOperator> for BinaryOperator {
             asp::mini_gringo::BinaryOperator::Modulo => BinaryOperator::Modulo,
             asp::mini_gringo::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
             asp::mini_gringo::BinaryOperator::Interval => BinaryOperator::Interval,
-        }
-    }
-}
-
-impl From<asp::gringo::BinaryOperator> for BinaryOperator {
-    fn from(value: asp::gringo::BinaryOperator) -> Self {
-        match value {
-            asp::gringo::BinaryOperator::Add => BinaryOperator::Add,
-            asp::gringo::BinaryOperator::Subtract => BinaryOperator::Subtract,
-            asp::gringo::BinaryOperator::Multiply => BinaryOperator::Multiply,
-            asp::gringo::BinaryOperator::Divide => BinaryOperator::Divide,
-            asp::gringo::BinaryOperator::DivideInteger => BinaryOperator::DivideInteger,
-            asp::gringo::BinaryOperator::Modulo => BinaryOperator::Modulo,
-            asp::gringo::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
-            asp::gringo::BinaryOperator::Interval => BinaryOperator::Interval,
         }
     }
 }
@@ -225,31 +170,6 @@ impl Term {
     }
 }
 
-impl From<asp::mini_gringo::Term> for Term {
-    fn from(value: asp::mini_gringo::Term) -> Self {
-        match value {
-            asp::mini_gringo::Term::BasicSymbol(t) => Term::BasicSymbol(t.into()),
-            asp::mini_gringo::Term::Variable(v) => Term::Variable(v.into()),
-            asp::mini_gringo::Term::UnaryOperation { op, arg } => {
-                let term = Term::from(*arg);
-                Term::UnaryOperation {
-                    op: op.into(),
-                    arg: term.into(),
-                }
-            }
-            asp::mini_gringo::Term::BinaryOperation { op, lhs, rhs } => {
-                let left = Term::from(*lhs);
-                let right = Term::from(*rhs);
-                Term::BinaryOperation {
-                    op: op.into(),
-                    lhs: left.into(),
-                    rhs: right.into(),
-                }
-            }
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Predicate {
     pub symbol: String,
@@ -257,24 +177,6 @@ pub struct Predicate {
 }
 
 impl_node!(Predicate, Format, PredicateParser);
-
-impl From<crate::syntax_tree::fol::sigma_0::Predicate> for Predicate {
-    fn from(value: crate::syntax_tree::fol::sigma_0::Predicate) -> Self {
-        Predicate {
-            symbol: value.symbol,
-            arity: value.arity,
-        }
-    }
-}
-
-impl From<crate::syntax_tree::GenericPredicate> for Predicate {
-    fn from(value: crate::syntax_tree::GenericPredicate) -> Self {
-        Predicate {
-            symbol: value.symbol,
-            arity: value.arity,
-        }
-    }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Atom {
@@ -309,16 +211,6 @@ impl Atom {
     }
 }
 
-impl From<asp::mini_gringo::Atom> for Atom {
-    fn from(value: asp::mini_gringo::Atom) -> Self {
-        let terms: Vec<Term> = value.terms.into_iter().map(Term::from).collect();
-        Atom {
-            predicate_symbol: value.predicate_symbol,
-            terms,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Sign {
     NoSign,
@@ -328,26 +220,6 @@ pub enum Sign {
 
 impl_node!(Sign, Format, SignParser);
 
-impl From<asp::mini_gringo::Sign> for Sign {
-    fn from(value: asp::mini_gringo::Sign) -> Self {
-        match value {
-            asp::mini_gringo::Sign::NoSign => Sign::NoSign,
-            asp::mini_gringo::Sign::Negation => Sign::Negation,
-            asp::mini_gringo::Sign::DoubleNegation => Sign::DoubleNegation,
-        }
-    }
-}
-
-impl From<asp::gringo::Sign> for Sign {
-    fn from(value: asp::gringo::Sign) -> Self {
-        match value {
-            asp::gringo::Sign::NoSign => Sign::NoSign,
-            asp::gringo::Sign::Negation => Sign::Negation,
-            asp::gringo::Sign::DoubleNegation => Sign::DoubleNegation,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Literal {
     pub sign: Sign,
@@ -355,15 +227,6 @@ pub struct Literal {
 }
 
 impl_node!(Literal, Format, LiteralParser);
-
-impl From<asp::mini_gringo::Literal> for Literal {
-    fn from(value: asp::mini_gringo::Literal) -> Self {
-        Literal {
-            sign: value.sign.into(),
-            atom: value.atom.into(),
-        }
-    }
-}
 
 impl Literal {
     pub fn predicate(&self) -> Predicate {
@@ -391,32 +254,6 @@ pub enum Relation {
 
 impl_node!(Relation, Format, RelationParser);
 
-impl From<asp::mini_gringo::Relation> for Relation {
-    fn from(value: asp::mini_gringo::Relation) -> Self {
-        match value {
-            asp::mini_gringo::Relation::Equal => Relation::Equal,
-            asp::mini_gringo::Relation::NotEqual => Relation::NotEqual,
-            asp::mini_gringo::Relation::Less => Relation::Less,
-            asp::mini_gringo::Relation::LessEqual => Relation::LessEqual,
-            asp::mini_gringo::Relation::Greater => Relation::Greater,
-            asp::mini_gringo::Relation::GreaterEqual => Relation::GreaterEqual,
-        }
-    }
-}
-
-impl From<asp::gringo::Relation> for Relation {
-    fn from(value: asp::gringo::Relation) -> Self {
-        match value {
-            asp::gringo::Relation::Equal => Relation::Equal,
-            asp::gringo::Relation::NotEqual => Relation::NotEqual,
-            asp::gringo::Relation::Less => Relation::Less,
-            asp::gringo::Relation::LessEqual => Relation::LessEqual,
-            asp::gringo::Relation::Greater => Relation::Greater,
-            asp::gringo::Relation::GreaterEqual => Relation::GreaterEqual,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Comparison {
     pub relation: Relation,
@@ -437,16 +274,6 @@ impl Comparison {
         let mut functions = self.lhs.function_constants();
         functions.extend(self.rhs.function_constants());
         functions
-    }
-}
-
-impl From<asp::mini_gringo::Comparison> for Comparison {
-    fn from(value: asp::mini_gringo::Comparison) -> Self {
-        Comparison {
-            relation: value.relation.into(),
-            lhs: value.lhs.into(),
-            rhs: value.rhs.into(),
-        }
     }
 }
 
@@ -491,15 +318,6 @@ impl AtomicFormula {
     }
 }
 
-impl From<asp::mini_gringo::AtomicFormula> for AtomicFormula {
-    fn from(value: asp::mini_gringo::AtomicFormula) -> Self {
-        match value {
-            asp::mini_gringo::AtomicFormula::Literal(l) => AtomicFormula::Literal(l.into()),
-            asp::mini_gringo::AtomicFormula::Comparison(c) => AtomicFormula::Comparison(c.into()),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ConditionalHead {
     AtomicFormula(AtomicFormula),
@@ -535,12 +353,6 @@ impl ConditionalHead {
             ConditionalHead::AtomicFormula(a) => a.positive_predicates(),
             ConditionalHead::Falsity => IndexSet::new(),
         }
-    }
-}
-
-impl From<asp::mini_gringo::AtomicFormula> for ConditionalHead {
-    fn from(value: asp::mini_gringo::AtomicFormula) -> Self {
-        ConditionalHead::AtomicFormula(value.into())
     }
 }
 
@@ -589,15 +401,6 @@ impl ConditionalBody {
 pub struct ConditionalLiteral {
     pub head: ConditionalHead,
     pub conditions: ConditionalBody,
-}
-
-impl From<asp::mini_gringo::AtomicFormula> for ConditionalLiteral {
-    fn from(value: asp::mini_gringo::AtomicFormula) -> Self {
-        ConditionalLiteral {
-            head: value.into(),
-            conditions: ConditionalBody { formulas: vec![] },
-        }
-    }
 }
 
 impl ConditionalLiteral {
@@ -688,16 +491,6 @@ impl Head {
     }
 }
 
-impl From<asp::mini_gringo::Head> for Head {
-    fn from(value: asp::mini_gringo::Head) -> Self {
-        match value {
-            asp::mini_gringo::Head::Basic(atom) => Head::Basic(atom.into()),
-            asp::mini_gringo::Head::Choice(atom) => Head::Choice(atom.into()),
-            asp::mini_gringo::Head::Falsity => Head::Falsity,
-        }
-    }
-}
-
 #[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BodyLiteral {
@@ -746,12 +539,6 @@ impl BodyLiteral {
             BodyLiteral::GfiveConditionalLiteral(l) => l.global_variables(),
             BodyLiteral::GsixConditionalLiteral(_) => IndexSet::new(),
         }
-    }
-}
-
-impl From<asp::mini_gringo::AtomicFormula> for BodyLiteral {
-    fn from(value: asp::mini_gringo::AtomicFormula) -> Self {
-        BodyLiteral::GfiveConditionalLiteral(value.into())
     }
 }
 
@@ -805,12 +592,6 @@ impl FromIterator<BodyLiteral> for Body {
     }
 }
 
-impl From<asp::mini_gringo::Body> for Body {
-    fn from(value: asp::mini_gringo::Body) -> Self {
-        Body::from_iter(value.into_iter().map(BodyLiteral::from))
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Rule {
     pub head: Head,
@@ -835,6 +616,12 @@ impl Rule {
         vars
     }
 
+    pub fn named_variables(&self) -> IndexSet<Variable> {
+        let mut vars = self.variables();
+        vars.retain(|v| v.name.is_some());
+        vars
+    }
+
     pub fn global_variables(&self) -> IndexSet<Variable> {
         let mut vars = self.head.variables();
         for formula in self.body.formulas.iter() {
@@ -851,21 +638,6 @@ impl Rule {
 
     pub fn is_choice_rule(&self) -> bool {
         matches!(self.head, Head::Choice(_))
-    }
-}
-
-impl From<asp::mini_gringo::Rule> for Rule {
-    fn from(value: asp::mini_gringo::Rule) -> Self {
-        Rule {
-            head: value.head.into(),
-            body: value.body.into(),
-        }
-    }
-}
-
-impl From<asp::gringo::Rule> for Rule {
-    fn from(value: asp::gringo::Rule) -> Self {
-        standardize_rule(value)
     }
 }
 
@@ -928,73 +700,6 @@ impl FromIterator<Rule> for Program {
     fn from_iter<T: IntoIterator<Item = Rule>>(iter: T) -> Self {
         Program {
             rules: iter.into_iter().collect(),
-        }
-    }
-}
-
-impl From<asp::mini_gringo::Program> for Program {
-    fn from(value: asp::mini_gringo::Program) -> Self {
-        Program::from_iter(value.into_iter().map(Rule::from))
-    }
-}
-
-impl From<asp::gringo::Program> for Program {
-    fn from(value: asp::gringo::Program) -> Self {
-        Program::from_iter(value.into_iter().map(Rule::from))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use {
-        super::{
-            Atom, AtomicFormula, BasicSymbol, Body, Comparison, Head, Program, Relation, Rule, Term,
-        },
-        crate::syntax_tree::asp::{
-            mini_gringo,
-            mini_gringo_cl::{
-                self, BodyLiteral, ConditionalBody, ConditionalHead, ConditionalLiteral,
-            },
-        },
-        indexmap::IndexSet,
-    };
-
-    #[test]
-    fn test_program_function_constants() {
-        // p :- b != a.
-        let program = Program {
-            rules: vec![Rule {
-                head: Head::Basic(Atom {
-                    predicate_symbol: "p".into(),
-                    terms: vec![],
-                }),
-                body: Body {
-                    formulas: vec![BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
-                        head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
-                            Comparison {
-                                lhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())),
-                                rhs: Term::BasicSymbol(BasicSymbol::Symbol("b".into())),
-                                relation: Relation::NotEqual,
-                            },
-                        )),
-                        conditions: ConditionalBody { formulas: vec![] },
-                    })],
-                },
-            }],
-        };
-        assert_eq!(
-            program.function_constants(),
-            IndexSet::from(["a".into(), "b".into()])
-        )
-    }
-
-    #[test]
-    fn test_mini_gringo_identity() {
-        for src in ["p :- q. q :- p."] {
-            let mg: mini_gringo::Program = src.parse().unwrap();
-            let left = mini_gringo_cl::Program::from(mg);
-            let right: mini_gringo_cl::Program = src.parse().unwrap();
-            assert_eq!(left, right, "left != right:\n{left}\n!=\n{right}")
         }
     }
 }

@@ -1,8 +1,8 @@
 use crate::{
     parsing::PestParser,
     syntax_tree::asp::mini_gringo_cl::{
-        Atom, AtomicFormula, BinaryOperator, Body, BodyLiteral, Comparison, ConditionalBody,
-        ConditionalHead, ConditionalLiteral, Head, Literal, PrecomputedTerm, Predicate, Program,
+        Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, BodyLiteral, Comparison,
+        ConditionalBody, ConditionalHead, ConditionalLiteral, Head, Literal, Predicate, Program,
         Relation, Rule, Sign, Term, UnaryOperator, Variable,
     },
 };
@@ -28,22 +28,22 @@ mod internal {
     }
 }
 
-pub struct PrecomputedTermParser;
+pub struct BasicSymbolParser;
 
-impl PestParser for PrecomputedTermParser {
-    type Node = PrecomputedTerm;
+impl PestParser for BasicSymbolParser {
+    type Node = BasicSymbol;
 
     type InternalParser = internal::Parser;
     type Rule = internal::Rule;
-    const RULE: internal::Rule = internal::Rule::precomputed_term_eoi;
+    const RULE: internal::Rule = internal::Rule::basic_symbol_eoi;
 
     fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
         match pair.as_rule() {
-            internal::Rule::precomputed_term => Self::translate_pairs(pair.into_inner()),
-            internal::Rule::infimum => PrecomputedTerm::Infimum,
-            internal::Rule::integer => PrecomputedTerm::Numeral(pair.as_str().parse().unwrap()),
-            internal::Rule::symbol => PrecomputedTerm::Symbol(pair.as_str().into()),
-            internal::Rule::supremum => PrecomputedTerm::Supremum,
+            internal::Rule::basic_symbol => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::infimum => BasicSymbol::Infimum,
+            internal::Rule::integer => BasicSymbol::Numeral(pair.as_str().parse().unwrap()),
+            internal::Rule::symbol => BasicSymbol::Symbol(pair.as_str().into()),
+            internal::Rule::supremum => BasicSymbol::Supremum,
             _ => Self::report_unexpected_pair(pair),
         }
     }
@@ -121,12 +121,24 @@ impl PestParser for TermParser {
         internal::PRATT_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 internal::Rule::term => TermParser::translate_pair(primary),
+                internal::Rule::herbrand_function => {
+                    let mut pairs = primary.into_inner();
+
+                    let symbol = pairs
+                        .next()
+                        .unwrap_or_else(|| Self::report_missing_pair())
+                        .as_str()
+                        .into();
+                    let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+
+                    Term::HerbrandFunction { symbol, terms }
+                }
                 internal::Rule::absolute_valued_term => Term::UnaryOperation {
                     op: UnaryOperator::AbsoluteValue,
                     arg: TermParser::translate_pairs(primary.into_inner()).into(),
                 },
-                internal::Rule::precomputed_term => {
-                    Term::PrecomputedTerm(PrecomputedTermParser::translate_pair(primary))
+                internal::Rule::basic_symbol => {
+                    Term::BasicSymbol(BasicSymbolParser::translate_pair(primary))
                 }
                 internal::Rule::variable => Term::Variable(VariableParser::translate_pair(primary)),
                 _ => Self::report_unexpected_pair(primary),
@@ -558,41 +570,40 @@ impl PestParser for ProgramParser {
 mod tests {
     use {
         super::{
-            AtomParser, AtomicFormulaParser, BinaryOperatorParser, BodyParser, ComparisonParser,
-            HeadParser, LiteralParser, PrecomputedTermParser, PredicateParser, ProgramParser,
+            AtomParser, AtomicFormulaParser, BasicSymbolParser, BinaryOperatorParser, BodyParser,
+            ComparisonParser, HeadParser, LiteralParser, PredicateParser, ProgramParser,
             RelationParser, RuleParser, SignParser, TermParser, UnaryOperatorParser,
             VariableParser,
         },
         crate::{
             parsing::TestedParser,
             syntax_tree::asp::mini_gringo_cl::{
-                Atom, AtomicFormula, BinaryOperator, Body, BodyLiteral, Comparison,
-                ConditionalBody, ConditionalHead, ConditionalLiteral, Head, Literal,
-                PrecomputedTerm, Predicate, Program, Relation, Rule, Sign, Term, UnaryOperator,
-                Variable,
+                Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, BodyLiteral, Comparison,
+                ConditionalBody, ConditionalHead, ConditionalLiteral, Head, Literal, Predicate,
+                Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
             },
         },
     };
 
     #[test]
-    fn parse_precomputed_term() {
-        PrecomputedTermParser
+    fn parse_basic_symbol() {
+        BasicSymbolParser
             .should_parse_into([
-                ("#inf", PrecomputedTerm::Infimum),
-                ("#infimum", PrecomputedTerm::Infimum),
-                ("0", PrecomputedTerm::Numeral(0)),
-                ("1", PrecomputedTerm::Numeral(1)),
-                ("42", PrecomputedTerm::Numeral(42)),
-                ("4711", PrecomputedTerm::Numeral(4711)),
-                ("-1", PrecomputedTerm::Numeral(-1)),
-                ("a", PrecomputedTerm::Symbol("a".into())),
-                ("aa", PrecomputedTerm::Symbol("aa".into())),
-                ("aA", PrecomputedTerm::Symbol("aA".into())),
-                ("_a", PrecomputedTerm::Symbol("_a".into())),
-                ("a_", PrecomputedTerm::Symbol("a_".into())),
-                ("noto", PrecomputedTerm::Symbol("noto".into())),
-                ("#sup", PrecomputedTerm::Supremum),
-                ("#supremum", PrecomputedTerm::Supremum),
+                ("#inf", BasicSymbol::Infimum),
+                ("#infimum", BasicSymbol::Infimum),
+                ("0", BasicSymbol::Numeral(0)),
+                ("1", BasicSymbol::Numeral(1)),
+                ("42", BasicSymbol::Numeral(42)),
+                ("4711", BasicSymbol::Numeral(4711)),
+                ("-1", BasicSymbol::Numeral(-1)),
+                ("a", BasicSymbol::Symbol("a".into())),
+                ("aa", BasicSymbol::Symbol("aa".into())),
+                ("aA", BasicSymbol::Symbol("aA".into())),
+                ("_a", BasicSymbol::Symbol("_a".into())),
+                ("a_", BasicSymbol::Symbol("a_".into())),
+                ("noto", BasicSymbol::Symbol("noto".into())),
+                ("#sup", BasicSymbol::Supremum),
+                ("#supremum", BasicSymbol::Supremum),
             ])
             .should_reject([
                 "'a",
@@ -659,37 +670,37 @@ mod tests {
     fn parse_term() {
         TermParser
             .should_parse_into([
-                ("#inf", Term::PrecomputedTerm(PrecomputedTerm::Infimum)),
-                ("#sup", Term::PrecomputedTerm(PrecomputedTerm::Supremum)),
-                ("1", Term::PrecomputedTerm(PrecomputedTerm::Numeral(1))),
-                ("(1)", Term::PrecomputedTerm(PrecomputedTerm::Numeral(1))),
-                ("-1", Term::PrecomputedTerm(PrecomputedTerm::Numeral(-1))),
+                ("#inf", Term::BasicSymbol(BasicSymbol::Infimum)),
+                ("#sup", Term::BasicSymbol(BasicSymbol::Supremum)),
+                ("1", Term::BasicSymbol(BasicSymbol::Numeral(1))),
+                ("(1)", Term::BasicSymbol(BasicSymbol::Numeral(1))),
+                ("-1", Term::BasicSymbol(BasicSymbol::Numeral(-1))),
                 (
                     "-(1)",
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
-                        arg: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        arg: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                     },
                 ),
                 (
                     "--1",
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
-                        arg: Term::PrecomputedTerm(PrecomputedTerm::Numeral(-1)).into(),
+                        arg: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
                     },
                 ),
                 (
                     "|1|",
                     Term::UnaryOperation {
                         op: UnaryOperator::AbsoluteValue,
-                        arg: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        arg: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                     },
                 ),
                 (
                     "|-1|",
                     Term::UnaryOperation {
                         op: UnaryOperator::AbsoluteValue,
-                        arg: Term::PrecomputedTerm(PrecomputedTerm::Numeral(-1)).into(),
+                        arg: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
                     },
                 ),
                 (
@@ -698,7 +709,7 @@ mod tests {
                         op: UnaryOperator::Negative,
                         arg: Term::UnaryOperation {
                             op: UnaryOperator::AbsoluteValue,
-                            arg: Term::PrecomputedTerm(PrecomputedTerm::Numeral(-1)).into(),
+                            arg: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
                         }
                         .into(),
                     },
@@ -711,8 +722,8 @@ mod tests {
                             op: UnaryOperator::AbsoluteValue,
                             arg: Term::BinaryOperation {
                                 op: BinaryOperator::Multiply,
-                                lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(3)).into(),
-                                rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(-1)).into(),
+                                lhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
+                                rhs: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
                             }
                             .into(),
                         }
@@ -723,38 +734,32 @@ mod tests {
                     "1 + 2",
                     Term::BinaryOperation {
                         op: BinaryOperator::Add,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                     },
                 ),
                 (
                     "1..2",
                     Term::BinaryOperation {
                         op: BinaryOperator::Interval,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                     },
                 ),
-                (
-                    "a",
-                    Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())),
-                ),
-                (
-                    "(a)",
-                    Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())),
-                ),
+                ("a", Term::BasicSymbol(BasicSymbol::Symbol("a".into()))),
+                ("(a)", Term::BasicSymbol(BasicSymbol::Symbol("a".into()))),
                 (
                     "-a",
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
-                        arg: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())).into(),
+                        arg: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                     },
                 ),
                 (
                     "-(a)",
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
-                        arg: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())).into(),
+                        arg: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                     },
                 ),
                 (
@@ -763,7 +768,7 @@ mod tests {
                         op: UnaryOperator::Negative,
                         arg: Term::UnaryOperation {
                             op: UnaryOperator::Negative,
-                            arg: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())).into(),
+                            arg: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                         }
                         .into(),
                     },
@@ -772,16 +777,16 @@ mod tests {
                     "1 + a",
                     Term::BinaryOperation {
                         op: BinaryOperator::Add,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                     },
                 ),
                 (
                     "1..a",
                     Term::BinaryOperation {
                         op: BinaryOperator::Interval,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                     },
                 ),
                 ("A", Term::Variable(Variable("A".into()))),
@@ -815,7 +820,7 @@ mod tests {
                     "1 + A",
                     Term::BinaryOperation {
                         op: BinaryOperator::Add,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },
                 ),
@@ -823,7 +828,7 @@ mod tests {
                     "1 / A",
                     Term::BinaryOperation {
                         op: BinaryOperator::Divide,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },
                 ),
@@ -831,7 +836,7 @@ mod tests {
                     "1 // A",
                     Term::BinaryOperation {
                         op: BinaryOperator::DivideInteger,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },
                 ),
@@ -839,7 +844,7 @@ mod tests {
                     "1 \\ A",
                     Term::BinaryOperation {
                         op: BinaryOperator::Modulo,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },
                 ),
@@ -847,7 +852,7 @@ mod tests {
                     "1 @ A",
                     Term::BinaryOperation {
                         op: BinaryOperator::ModuloInteger,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },
                 ),
@@ -855,7 +860,7 @@ mod tests {
                     "1..A",
                     Term::BinaryOperation {
                         op: BinaryOperator::Interval,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },
                 ),
@@ -865,14 +870,14 @@ mod tests {
                         op: BinaryOperator::Multiply,
                         lhs: Term::BinaryOperation {
                             op: BinaryOperator::Add,
-                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                             rhs: Term::Variable(Variable("A".into())).into(),
                         }
                         .into(),
                         rhs: Term::BinaryOperation {
                             op: BinaryOperator::Subtract,
-                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol("a".into())).into(),
+                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            rhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                         }
                         .into(),
                     },
@@ -885,25 +890,25 @@ mod tests {
                             op: BinaryOperator::Subtract,
                             lhs: Term::BinaryOperation {
                                 op: BinaryOperator::Add,
-                                lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                                rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
+                                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                                rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                             }
                             .into(),
-                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(3)).into(),
+                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                         }
                         .into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(4)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(4)).into(),
                     },
                 ),
                 (
                     "2 * (1..3)",
                     Term::BinaryOperation {
                         op: BinaryOperator::Multiply,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                         rhs: Term::BinaryOperation {
                             op: BinaryOperator::Interval,
-                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(3)).into(),
+                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                         }
                         .into(),
                     },
@@ -914,22 +919,22 @@ mod tests {
                         op: BinaryOperator::Interval,
                         lhs: Term::BinaryOperation {
                             op: BinaryOperator::Interval,
-                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(3)).into(),
+                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                         }
                         .into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                     },
                 ),
                 (
                     "1 + 2 * 3",
                     Term::BinaryOperation {
                         op: BinaryOperator::Add,
-                        lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::BinaryOperation {
                             op: BinaryOperator::Multiply,
-                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
-                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(3)).into(),
+                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                         }
                         .into(),
                     },
@@ -940,11 +945,11 @@ mod tests {
                         op: BinaryOperator::Add,
                         lhs: Term::BinaryOperation {
                             op: BinaryOperator::Multiply,
-                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)).into(),
-                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)).into(),
+                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
                         }
                         .into(),
-                        rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(3)).into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
                     },
                 ),
             ])
@@ -1011,14 +1016,14 @@ mod tests {
                     "p(1)",
                     Atom {
                         predicate_symbol: "p".into(),
-                        terms: vec![Term::PrecomputedTerm(PrecomputedTerm::Numeral(1))],
+                        terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1))],
                     },
                 ),
                 (
                     "sqrt_b(1)",
                     Atom {
                         predicate_symbol: "sqrt_b".into(),
-                        terms: vec![Term::PrecomputedTerm(PrecomputedTerm::Numeral(1))],
+                        terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1))],
                     },
                 ),
                 (
@@ -1026,8 +1031,8 @@ mod tests {
                     Atom {
                         predicate_symbol: "p".into(),
                         terms: vec![
-                            Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)),
-                            Term::PrecomputedTerm(PrecomputedTerm::Numeral(2)),
+                            Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)),
                         ],
                     },
                 ),
@@ -1112,7 +1117,7 @@ mod tests {
             "1 < N",
             Comparison {
                 relation: Relation::Less,
-                lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)),
+                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
                 rhs: Term::Variable(Variable("N".into())),
             },
         )]);
@@ -1125,7 +1130,7 @@ mod tests {
                 "1 < N",
                 AtomicFormula::Comparison(Comparison {
                     relation: Relation::Less,
-                    lhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)),
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
                     rhs: Term::Variable(Variable("N".into())),
                 }),
             ),
@@ -1211,7 +1216,7 @@ mod tests {
                                 Comparison {
                                     relation: Relation::Less,
                                     lhs: Term::Variable(Variable("N".into())),
-                                    rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)),
+                                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
                                 },
                             )),
                             conditions: ConditionalBody { formulas: vec![] },
@@ -1268,7 +1273,7 @@ mod tests {
                                 Comparison {
                                     relation: Relation::Less,
                                     lhs: Term::Variable(Variable("X".into())),
-                                    rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)),
+                                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
                                 },
                             )),
                             conditions: ConditionalBody { formulas: vec![] },
@@ -1325,7 +1330,7 @@ mod tests {
                                 Comparison {
                                     relation: Relation::Less,
                                     lhs: Term::Variable(Variable("X".into())),
-                                    rhs: Term::PrecomputedTerm(PrecomputedTerm::Numeral(1)),
+                                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
                                 },
                             )),
                             conditions: ConditionalBody { formulas: vec![] },
@@ -1384,12 +1389,8 @@ mod tests {
                                 ConditionalLiteral {
                                     head: ConditionalHead::AtomicFormula(
                                         AtomicFormula::Comparison(Comparison {
-                                            lhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol(
-                                                "a".into(),
-                                            )),
-                                            rhs: Term::PrecomputedTerm(PrecomputedTerm::Symbol(
-                                                "b".into(),
-                                            )),
+                                            lhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())),
+                                            rhs: Term::BasicSymbol(BasicSymbol::Symbol("b".into())),
                                             relation: Relation::NotEqual,
                                         }),
                                     ),

@@ -3,17 +3,17 @@ use indexmap::IndexSet;
 use crate::{
     convenience::variable_selection::VariableSelection,
     syntax_tree::asp::mini_gringo::{
-        Atom, AtomicFormula, Body, Comparison, Head, Literal, PrecomputedTerm, Program, Relation,
-        Rule, Term, Variable,
+        Atom, AtomicFormula, BasicSymbol, Body, Comparison, Head, Literal, Program, Relation, Rule,
+        Term, Variable,
     },
 };
 
 // basic symbols in sigma_0 include symbolic constants, numerals, inf, and sup
 // when we don't allow constructor functions, basic symbols are just the set of precomputed terms
-fn leading_symbol_is_arithmetic_compatible(term: &PrecomputedTerm) -> bool {
+fn leading_symbol_is_arithmetic_compatible(term: &BasicSymbol) -> bool {
     match term {
-        PrecomputedTerm::Numeral(_) => true,
-        PrecomputedTerm::Infimum | PrecomputedTerm::Symbol(_) | PrecomputedTerm::Supremum => false,
+        BasicSymbol::Numeral(_) => true,
+        BasicSymbol::Infimum | BasicSymbol::Symbol(_) | BasicSymbol::Supremum => false,
     }
 }
 
@@ -24,7 +24,7 @@ fn term_replacement(
     rhs_of_numeric_equation: bool,
 ) -> (Term, Option<Comparison>) {
     match term {
-        Term::PrecomputedTerm(ref pct) => {
+        Term::BasicSymbol(ref pct) => {
             // abnormal term, case a
             if within_arithmetic_scope && !leading_symbol_is_arithmetic_compatible(pct) {
                 // no subterms in this case, so abnormality must be innermost
@@ -36,7 +36,7 @@ fn term_replacement(
                 };
                 (Term::Variable(v), Some(v_equals_t))
             } else {
-                (Term::PrecomputedTerm(pct.clone()), None)
+                (Term::BasicSymbol(pct.clone()), None)
             }
 
             // abnormal term, case b does not apply to pc terms

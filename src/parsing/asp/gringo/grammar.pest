@@ -8,8 +8,10 @@ basic_symbol_eoi = _{ basic_symbol ~ EOI }
     symbol = @{ !negation ~ "_"? ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
     supremum = @{ "#supremum" | "#sup" }
 
-variable = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHANUMERIC* }
+variable = { anonymous_variable | named_variable }
 variable_eoi = _{ variable ~ EOI }
+    named_variable     = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHANUMERIC* }
+    anonymous_variable = @{ "_" }
 
 unary_operator = _{ negative }
 unary_operator_eoi = _{ unary_operator ~ EOI }

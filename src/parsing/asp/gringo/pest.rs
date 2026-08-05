@@ -1,8 +1,9 @@
 use crate::{
     parsing::PestParser,
-    syntax_tree::asp::mini_gringo::{
-        Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, Comparison, Head, Literal,
-        Predicate, Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
+    syntax_tree::asp::gringo::{
+        Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, BodyLiteral, Comparison,
+        ConditionalBody, ConditionalHead, ConditionalLiteral, Head, Literal, Predicate, Program,
+        Relation, Rule, Sign, Term, UnaryOperator, Variable,
     },
 };
 
@@ -10,7 +11,7 @@ mod internal {
     use pest::pratt_parser::PrattParser;
 
     #[derive(pest_derive::Parser)]
-    #[grammar = "parsing/asp/mini_gringo/grammar.pest"]
+    #[grammar = "parsing/asp/gringo/grammar.pest"]
     pub struct Parser;
 
     lazy_static::lazy_static! {
@@ -21,7 +22,7 @@ mod internal {
             PrattParser::new()
                 .op(Op::infix(interval, Left))
                 .op(Op::infix(add, Left) | Op::infix(subtract, Left))
-                .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
+                .op(Op::infix(multiply, Left) | Op::infix(divide_integer, Left) | Op::infix(divide, Left) | Op::infix(modulo_integer, Left) | Op::infix(modulo, Left))
                 .op(Op::prefix(negative))
         };
     }
@@ -34,11 +35,11 @@ impl PestParser for BasicSymbolParser {
 
     type InternalParser = internal::Parser;
     type Rule = internal::Rule;
-    const RULE: internal::Rule = internal::Rule::precomputed_term_eoi;
+    const RULE: internal::Rule = internal::Rule::basic_symbol_eoi;
 
     fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
         match pair.as_rule() {
-            internal::Rule::precomputed_term => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::basic_symbol => Self::translate_pairs(pair.into_inner()),
             internal::Rule::infimum => BasicSymbol::Infimum,
             internal::Rule::integer => BasicSymbol::Numeral(pair.as_str().parse().unwrap()),
             internal::Rule::symbol => BasicSymbol::Symbol(pair.as_str().into()),
@@ -58,11 +59,14 @@ impl PestParser for VariableParser {
     const RULE: internal::Rule = internal::Rule::variable_eoi;
 
     fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
-        if pair.as_rule() != internal::Rule::variable {
-            Self::report_unexpected_pair(pair)
+        match pair.as_rule() {
+            internal::Rule::variable => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::named_variable => Variable {
+                name: Some(pair.as_str().into()),
+            },
+            internal::Rule::anonymous_variable => Variable { name: None },
+            _ => Self::report_unexpected_pair(pair),
         }
-
-        Variable(pair.as_str().into())
     }
 }
 
@@ -97,7 +101,9 @@ impl PestParser for BinaryOperatorParser {
             internal::Rule::add => BinaryOperator::Add,
             internal::Rule::subtract => BinaryOperator::Subtract,
             internal::Rule::multiply => BinaryOperator::Multiply,
+            internal::Rule::divide_integer => BinaryOperator::DivideInteger,
             internal::Rule::divide => BinaryOperator::Divide,
+            internal::Rule::modulo_integer => BinaryOperator::ModuloInteger,
             internal::Rule::modulo => BinaryOperator::Modulo,
             internal::Rule::interval => BinaryOperator::Interval,
             _ => Self::report_unexpected_pair(pair),
@@ -118,7 +124,23 @@ impl PestParser for TermParser {
         internal::PRATT_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 internal::Rule::term => TermParser::translate_pair(primary),
-                internal::Rule::precomputed_term => {
+                internal::Rule::herbrand_function => {
+                    let mut pairs = primary.into_inner();
+
+                    let symbol = pairs
+                        .next()
+                        .unwrap_or_else(|| Self::report_missing_pair())
+                        .as_str()
+                        .into();
+                    let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+
+                    Term::HerbrandFunction { symbol, terms }
+                }
+                internal::Rule::absolute_valued_term => Term::UnaryOperation {
+                    op: UnaryOperator::AbsoluteValue,
+                    arg: TermParser::translate_pairs(primary.into_inner()).into(),
+                },
+                internal::Rule::basic_symbol => {
                     Term::BasicSymbol(BasicSymbolParser::translate_pair(primary))
                 }
                 internal::Rule::variable => Term::Variable(VariableParser::translate_pair(primary)),
@@ -343,6 +365,52 @@ impl PestParser for AtomicFormulaParser {
     }
 }
 
+pub struct ConditionalHeadParser;
+
+impl PestParser for ConditionalHeadParser {
+    type Node = ConditionalHead;
+
+    type InternalParser = internal::Parser;
+    type Rule = internal::Rule;
+    const RULE: internal::Rule = internal::Rule::conditional_head_eoi;
+
+    fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
+        match pair.as_rule() {
+            internal::Rule::conditional_head => {
+                ConditionalHeadParser::translate_pairs(pair.into_inner())
+            }
+            internal::Rule::atomic_formula => {
+                ConditionalHead::AtomicFormula(AtomicFormulaParser::translate_pair(pair))
+            }
+            internal::Rule::explicit_false => ConditionalHead::Falsity,
+            _ => Self::report_unexpected_pair(pair),
+        }
+    }
+}
+
+pub struct ConditionalBodyParser;
+
+impl PestParser for ConditionalBodyParser {
+    type Node = ConditionalBody;
+
+    type InternalParser = internal::Parser;
+    type Rule = internal::Rule;
+    const RULE: Self::Rule = internal::Rule::conditional_body_eoi;
+
+    fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
+        if pair.as_rule() != internal::Rule::conditional_body {
+            Self::report_unexpected_pair(pair)
+        }
+
+        ConditionalBody {
+            formulas: pair
+                .into_inner()
+                .map(AtomicFormulaParser::translate_pair)
+                .collect(),
+        }
+    }
+}
+
 pub struct HeadParser;
 
 impl PestParser for HeadParser {
@@ -367,6 +435,65 @@ impl PestParser for HeadParser {
     }
 }
 
+pub struct BodyLiteralParser;
+
+impl PestParser for BodyLiteralParser {
+    type Node = BodyLiteral;
+
+    type InternalParser = internal::Parser;
+    type Rule = internal::Rule;
+    const RULE: internal::Rule = internal::Rule::body_literal_eoi;
+
+    fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
+        let mut pairs = pair.into_inner();
+
+        match pairs.next() {
+            Some(pair) => match pair.as_rule() {
+                internal::Rule::gfive_conditional_literal => {
+                    let mut pairs = pair.into_inner();
+
+                    let head = pairs
+                        .next()
+                        .map(ConditionalHeadParser::translate_pair)
+                        .unwrap_or_else(|| Self::report_missing_pair());
+                    let conditions = pairs
+                        .next()
+                        .map(ConditionalBodyParser::translate_pair)
+                        .unwrap_or_else(|| ConditionalBody { formulas: vec![] });
+
+                    if let Some(pair) = pairs.next() {
+                        Self::report_unexpected_pair(pair)
+                    }
+
+                    BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral { head, conditions })
+                }
+
+                internal::Rule::gsix_conditional_literal => {
+                    let mut pairs = pair.into_inner();
+
+                    let head = pairs
+                        .next()
+                        .map(ConditionalHeadParser::translate_pair)
+                        .unwrap_or_else(|| Self::report_missing_pair());
+                    let conditions = pairs
+                        .next()
+                        .map(ConditionalBodyParser::translate_pair)
+                        .unwrap_or_else(|| ConditionalBody { formulas: vec![] });
+
+                    if let Some(pair) = pairs.next() {
+                        Self::report_unexpected_pair(pair)
+                    }
+
+                    BodyLiteral::GsixConditionalLiteral(ConditionalLiteral { head, conditions })
+                }
+
+                _ => Self::report_unexpected_pair(pair),
+            },
+            None => Self::report_missing_pair(),
+        }
+    }
+}
+
 pub struct BodyParser;
 
 impl PestParser for BodyParser {
@@ -384,7 +511,7 @@ impl PestParser for BodyParser {
         Body {
             formulas: pair
                 .into_inner()
-                .map(AtomicFormulaParser::translate_pair)
+                .map(BodyLiteralParser::translate_pair)
                 .collect(),
         }
     }
@@ -442,6 +569,7 @@ impl PestParser for ProgramParser {
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use {
@@ -453,15 +581,16 @@ mod tests {
         },
         crate::{
             parsing::TestedParser,
-            syntax_tree::asp::mini_gringo::{
-                Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, Comparison, Head, Literal,
-                Predicate, Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
+            syntax_tree::asp::gringo::{
+                Atom, AtomicFormula, BasicSymbol, BinaryOperator, Body, BodyLiteral, Comparison,
+                ConditionalBody, ConditionalHead, ConditionalLiteral, Head, Literal, Predicate,
+                Program, Relation, Rule, Sign, Term, UnaryOperator, Variable,
             },
         },
     };
 
     #[test]
-    fn parse_precomputed_term() {
+    fn parse_basic_symbol() {
         BasicSymbolParser
             .should_parse_into([
                 ("#inf", BasicSymbol::Infimum),
@@ -504,22 +633,27 @@ mod tests {
     fn parse_variable() {
         VariableParser
             .should_parse_into([
-                ("A", Variable("A".into())),
-                ("AA", Variable("AA".into())),
-                ("Aa", Variable("Aa".into())),
+                ("_", Variable { name: None }),
+                (
+                    "A",
+                    Variable {
+                        name: Some("A".into()),
+                    },
+                ),
+                (
+                    "AA",
+                    Variable {
+                        name: Some("AA".into()),
+                    },
+                ),
+                (
+                    "Aa",
+                    Variable {
+                        name: Some("Aa".into()),
+                    },
+                ),
             ])
-            .should_reject([
-                "_",
-                "a",
-                "1",
-                "A A",
-                "A-A",
-                "'",
-                "-A",
-                "_A",
-                "'A",
-                "_'X'_'X'_",
-            ]);
+            .should_reject(["a", "1", "A A", "A-A", "'", "-A", "_A", "'A", "_'X'_'X'_"]);
     }
 
     #[test]
@@ -533,8 +667,10 @@ mod tests {
             ("+", BinaryOperator::Add),
             ("-", BinaryOperator::Subtract),
             ("*", BinaryOperator::Multiply),
+            ("//", BinaryOperator::DivideInteger),
             ("/", BinaryOperator::Divide),
             ("\\", BinaryOperator::Modulo),
+            ("@", BinaryOperator::ModuloInteger),
             ("..", BinaryOperator::Interval),
         ]);
     }
@@ -560,6 +696,83 @@ mod tests {
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
                         arg: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
+                    },
+                ),
+                (
+                    "|1|",
+                    Term::UnaryOperation {
+                        op: UnaryOperator::AbsoluteValue,
+                        arg: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                    },
+                ),
+                (
+                    "|-1|",
+                    Term::UnaryOperation {
+                        op: UnaryOperator::AbsoluteValue,
+                        arg: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
+                    },
+                ),
+                (
+                    "-|-1|",
+                    Term::UnaryOperation {
+                        op: UnaryOperator::Negative,
+                        arg: Term::UnaryOperation {
+                            op: UnaryOperator::AbsoluteValue,
+                            arg: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
+                        }
+                        .into(),
+                    },
+                ),
+                (
+                    "-|3*-1|",
+                    Term::UnaryOperation {
+                        op: UnaryOperator::Negative,
+                        arg: Term::UnaryOperation {
+                            op: UnaryOperator::AbsoluteValue,
+                            arg: Term::BinaryOperation {
+                                op: BinaryOperator::Multiply,
+                                lhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
+                                rhs: Term::BasicSymbol(BasicSymbol::Numeral(-1)).into(),
+                            }
+                            .into(),
+                        }
+                        .into(),
+                    },
+                ),
+                (
+                    "c(1, 2)",
+                    Term::HerbrandFunction {
+                        symbol: "c".to_string(),
+                        terms: vec![
+                            Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                        ],
+                    },
+                ),
+                (
+                    "f(f(X))",
+                    Term::HerbrandFunction {
+                        symbol: "f".to_string(),
+                        terms: vec![Term::HerbrandFunction {
+                            symbol: "f".to_string(),
+                            terms: vec![Term::Variable(Variable {
+                                name: Some("X".into()),
+                            })],
+                        }],
+                    },
+                ),
+                (
+                    "charlie(1, 2, frank(1))",
+                    Term::HerbrandFunction {
+                        symbol: "charlie".to_string(),
+                        terms: vec![
+                            Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                            Term::HerbrandFunction {
+                                symbol: "frank".to_string(),
+                                terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1)).into()],
+                            },
+                        ],
                     },
                 ),
                 (
@@ -621,20 +834,37 @@ mod tests {
                         rhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())).into(),
                     },
                 ),
-                ("A", Term::Variable(Variable("A".into()))),
-                ("(A)", Term::Variable(Variable("A".into()))),
+                ("_", Term::Variable(Variable { name: None })),
+                (
+                    "A",
+                    Term::Variable(Variable {
+                        name: Some("A".into()),
+                    }),
+                ),
+                (
+                    "(A)",
+                    Term::Variable(Variable {
+                        name: Some("A".into()),
+                    }),
+                ),
                 (
                     "-A",
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
-                        arg: Term::Variable(Variable("A".into())).into(),
+                        arg: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
                     },
                 ),
                 (
                     "-(A)",
                     Term::UnaryOperation {
                         op: UnaryOperator::Negative,
-                        arg: Term::Variable(Variable("A".into())).into(),
+                        arg: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
                     },
                 ),
                 (
@@ -643,7 +873,10 @@ mod tests {
                         op: UnaryOperator::Negative,
                         arg: Term::UnaryOperation {
                             op: UnaryOperator::Negative,
-                            arg: Term::Variable(Variable("A".into())).into(),
+                            arg: Term::Variable(Variable {
+                                name: Some("A".into()),
+                            })
+                            .into(),
                         }
                         .into(),
                     },
@@ -653,7 +886,54 @@ mod tests {
                     Term::BinaryOperation {
                         op: BinaryOperator::Add,
                         lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
-                        rhs: Term::Variable(Variable("A".into())).into(),
+                        rhs: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
+                    },
+                ),
+                (
+                    "1 / A",
+                    Term::BinaryOperation {
+                        op: BinaryOperator::Divide,
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
+                    },
+                ),
+                (
+                    "1 // A",
+                    Term::BinaryOperation {
+                        op: BinaryOperator::DivideInteger,
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
+                    },
+                ),
+                (
+                    "1 \\ A",
+                    Term::BinaryOperation {
+                        op: BinaryOperator::Modulo,
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
+                    },
+                ),
+                (
+                    "1 @ A",
+                    Term::BinaryOperation {
+                        op: BinaryOperator::ModuloInteger,
+                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                        rhs: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
                     },
                 ),
                 (
@@ -661,7 +941,10 @@ mod tests {
                     Term::BinaryOperation {
                         op: BinaryOperator::Interval,
                         lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
-                        rhs: Term::Variable(Variable("A".into())).into(),
+                        rhs: Term::Variable(Variable {
+                            name: Some("A".into()),
+                        })
+                        .into(),
                     },
                 ),
                 (
@@ -671,7 +954,10 @@ mod tests {
                         lhs: Term::BinaryOperation {
                             op: BinaryOperator::Add,
                             lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
-                            rhs: Term::Variable(Variable("A".into())).into(),
+                            rhs: Term::Variable(Variable {
+                                name: Some("A".into()),
+                            })
+                            .into(),
                         }
                         .into(),
                         rhs: Term::BinaryOperation {
@@ -750,6 +1036,18 @@ mod tests {
                         }
                         .into(),
                         rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
+                    },
+                ),
+                (
+                    "f(a) + 1",
+                    Term::BinaryOperation {
+                        op: BinaryOperator::Add,
+                        lhs: Term::HerbrandFunction {
+                            symbol: "f".to_string(),
+                            terms: vec![Term::BasicSymbol(BasicSymbol::Symbol("a".into()))],
+                        }
+                        .into(),
+                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                     },
                 ),
             ])
@@ -836,6 +1134,19 @@ mod tests {
                         ],
                     },
                 ),
+                (
+                    "p(p(1), 2)",
+                    Atom {
+                        predicate_symbol: "p".into(),
+                        terms: vec![
+                            Term::HerbrandFunction {
+                                symbol: "p".into(),
+                                terms: vec![Term::BasicSymbol(BasicSymbol::Numeral(1))],
+                            },
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)),
+                        ],
+                    },
+                ),
             ])
             .should_reject(["p(1,)", "1", "P", "p("]);
     }
@@ -918,7 +1229,9 @@ mod tests {
             Comparison {
                 relation: Relation::Less,
                 lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
-                rhs: Term::Variable(Variable("N".into())),
+                rhs: Term::Variable(Variable {
+                    name: Some("N".into()),
+                }),
             },
         )]);
     }
@@ -931,7 +1244,21 @@ mod tests {
                 AtomicFormula::Comparison(Comparison {
                     relation: Relation::Less,
                     lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
-                    rhs: Term::Variable(Variable("N".into())),
+                    rhs: Term::Variable(Variable {
+                        name: Some("N".into()),
+                    }),
+                }),
+            ),
+            (
+                "p(X)",
+                AtomicFormula::Literal(Literal {
+                    sign: Sign::NoSign,
+                    atom: Atom {
+                        predicate_symbol: "p".into(),
+                        terms: vec![Term::Variable(Variable {
+                            name: Some("X".into()),
+                        })],
+                    },
                 }),
             ),
             (
@@ -975,12 +1302,15 @@ mod tests {
             (
                 "p",
                 Body {
-                    formulas: vec![AtomicFormula::Literal(Literal {
-                        sign: Sign::NoSign,
-                        atom: Atom {
-                            predicate_symbol: "p".into(),
-                            terms: vec![],
-                        },
+                    formulas: vec![BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                        head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
+                            sign: Sign::NoSign,
+                            atom: Atom {
+                                predicate_symbol: "p".into(),
+                                terms: vec![],
+                            },
+                        })),
+                        conditions: ConditionalBody { formulas: vec![] },
                     })],
                 },
             ),
@@ -988,17 +1318,165 @@ mod tests {
                 "p, N < 1",
                 Body {
                     formulas: vec![
-                        AtomicFormula::Literal(Literal {
-                            sign: Sign::NoSign,
-                            atom: Atom {
-                                predicate_symbol: "p".into(),
-                                terms: vec![],
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
+                                sign: Sign::NoSign,
+                                atom: Atom {
+                                    predicate_symbol: "p".into(),
+                                    terms: vec![],
+                                },
+                            })),
+                            conditions: ConditionalBody { formulas: vec![] },
+                        }),
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
+                                Comparison {
+                                    relation: Relation::Less,
+                                    lhs: Term::Variable(Variable {
+                                        name: Some("N".into()),
+                                    }),
+                                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                                },
+                            )),
+                            conditions: ConditionalBody { formulas: vec![] },
+                        }),
+                    ],
+                },
+            ),
+            (
+                "p(X); not q(X,Y) : r(X), t(Y); X < 1",
+                Body {
+                    formulas: vec![
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
+                                sign: Sign::NoSign,
+                                atom: Atom {
+                                    predicate_symbol: "p".into(),
+                                    terms: vec![Term::Variable(Variable {
+                                        name: Some("X".into()),
+                                    })],
+                                },
+                            })),
+                            conditions: ConditionalBody { formulas: vec![] },
+                        }),
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
+                                sign: Sign::Negation,
+                                atom: Atom {
+                                    predicate_symbol: "q".into(),
+                                    terms: vec![
+                                        Term::Variable(Variable {
+                                            name: Some("X".into()),
+                                        }),
+                                        Term::Variable(Variable {
+                                            name: Some("Y".into()),
+                                        }),
+                                    ],
+                                },
+                            })),
+                            conditions: ConditionalBody {
+                                formulas: vec![
+                                    AtomicFormula::Literal(Literal {
+                                        sign: Sign::NoSign,
+                                        atom: Atom {
+                                            predicate_symbol: "r".into(),
+                                            terms: vec![Term::Variable(Variable {
+                                                name: Some("X".into()),
+                                            })],
+                                        },
+                                    }),
+                                    AtomicFormula::Literal(Literal {
+                                        sign: Sign::NoSign,
+                                        atom: Atom {
+                                            predicate_symbol: "t".into(),
+                                            terms: vec![Term::Variable(Variable {
+                                                name: Some("Y".into()),
+                                            })],
+                                        },
+                                    }),
+                                ],
                             },
                         }),
-                        AtomicFormula::Comparison(Comparison {
-                            relation: Relation::Less,
-                            lhs: Term::Variable(Variable("N".into())),
-                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
+                                Comparison {
+                                    relation: Relation::Less,
+                                    lhs: Term::Variable(Variable {
+                                        name: Some("X".into()),
+                                    }),
+                                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                                },
+                            )),
+                            conditions: ConditionalBody { formulas: vec![] },
+                        }),
+                    ],
+                },
+            ),
+            (
+                "p(X); not q(X,Y) :: r(X), t(Y); X < 1",
+                Body {
+                    formulas: vec![
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
+                                sign: Sign::NoSign,
+                                atom: Atom {
+                                    predicate_symbol: "p".into(),
+                                    terms: vec![Term::Variable(Variable {
+                                        name: Some("X".into()),
+                                    })],
+                                },
+                            })),
+                            conditions: ConditionalBody { formulas: vec![] },
+                        }),
+                        BodyLiteral::GsixConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(Literal {
+                                sign: Sign::Negation,
+                                atom: Atom {
+                                    predicate_symbol: "q".into(),
+                                    terms: vec![
+                                        Term::Variable(Variable {
+                                            name: Some("X".into()),
+                                        }),
+                                        Term::Variable(Variable {
+                                            name: Some("Y".into()),
+                                        }),
+                                    ],
+                                },
+                            })),
+                            conditions: ConditionalBody {
+                                formulas: vec![
+                                    AtomicFormula::Literal(Literal {
+                                        sign: Sign::NoSign,
+                                        atom: Atom {
+                                            predicate_symbol: "r".into(),
+                                            terms: vec![Term::Variable(Variable {
+                                                name: Some("X".into()),
+                                            })],
+                                        },
+                                    }),
+                                    AtomicFormula::Literal(Literal {
+                                        sign: Sign::NoSign,
+                                        atom: Atom {
+                                            predicate_symbol: "t".into(),
+                                            terms: vec![Term::Variable(Variable {
+                                                name: Some("Y".into()),
+                                            })],
+                                        },
+                                    }),
+                                ],
+                            },
+                        }),
+                        BodyLiteral::GfiveConditionalLiteral(ConditionalLiteral {
+                            head: ConditionalHead::AtomicFormula(AtomicFormula::Comparison(
+                                Comparison {
+                                    relation: Relation::Less,
+                                    lhs: Term::Variable(Variable {
+                                        name: Some("X".into()),
+                                    }),
+                                    rhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                                },
+                            )),
+                            conditions: ConditionalBody { formulas: vec![] },
                         }),
                     ],
                 },
@@ -1025,13 +1503,20 @@ mod tests {
                             terms: vec![],
                         }),
                         body: Body {
-                            formulas: vec![AtomicFormula::Literal(Literal {
-                                sign: Sign::NoSign,
-                                atom: Atom {
-                                    predicate_symbol: "b".into(),
-                                    terms: vec![],
+                            formulas: vec![BodyLiteral::GfiveConditionalLiteral(
+                                ConditionalLiteral {
+                                    head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(
+                                        Literal {
+                                            sign: Sign::NoSign,
+                                            atom: Atom {
+                                                predicate_symbol: "b".into(),
+                                                terms: vec![],
+                                            },
+                                        },
+                                    )),
+                                    conditions: ConditionalBody { formulas: vec![] },
                                 },
-                            })],
+                            )],
                         },
                     },
                 ),
@@ -1043,11 +1528,18 @@ mod tests {
                             terms: vec![],
                         }),
                         body: Body {
-                            formulas: vec![AtomicFormula::Comparison(Comparison {
-                                lhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())),
-                                rhs: Term::BasicSymbol(BasicSymbol::Symbol("b".into())),
-                                relation: Relation::NotEqual,
-                            })],
+                            formulas: vec![BodyLiteral::GfiveConditionalLiteral(
+                                ConditionalLiteral {
+                                    head: ConditionalHead::AtomicFormula(
+                                        AtomicFormula::Comparison(Comparison {
+                                            lhs: Term::BasicSymbol(BasicSymbol::Symbol("a".into())),
+                                            rhs: Term::BasicSymbol(BasicSymbol::Symbol("b".into())),
+                                            relation: Relation::NotEqual,
+                                        }),
+                                    ),
+                                    conditions: ConditionalBody { formulas: vec![] },
+                                },
+                            )],
                         },
                     },
                 ),
@@ -1069,6 +1561,36 @@ mod tests {
                             terms: vec![],
                         }),
                         body: Body { formulas: vec![] },
+                    },
+                ),
+                (
+                    "a :- p(f(a)).",
+                    Rule {
+                        head: Head::Basic(Atom {
+                            predicate_symbol: "a".into(),
+                            terms: vec![],
+                        }),
+                        body: Body {
+                            formulas: vec![BodyLiteral::GfiveConditionalLiteral(
+                                ConditionalLiteral {
+                                    head: ConditionalHead::AtomicFormula(AtomicFormula::Literal(
+                                        Literal {
+                                            sign: Sign::NoSign,
+                                            atom: Atom {
+                                                predicate_symbol: "p".into(),
+                                                terms: vec![Term::HerbrandFunction {
+                                                    symbol: "f".into(),
+                                                    terms: vec![Term::BasicSymbol(
+                                                        BasicSymbol::Symbol("a".into()),
+                                                    )],
+                                                }],
+                                            },
+                                        },
+                                    )),
+                                    conditions: ConditionalBody { formulas: vec![] },
+                                },
+                            )],
+                        },
                     },
                 ),
             ])
@@ -1096,13 +1618,20 @@ mod tests {
                                 terms: vec![],
                             }),
                             body: Body {
-                                formulas: vec![AtomicFormula::Literal(Literal {
-                                    sign: Sign::NoSign,
-                                    atom: Atom {
-                                        predicate_symbol: "a".into(),
-                                        terms: vec![],
+                                formulas: vec![BodyLiteral::GfiveConditionalLiteral(
+                                    ConditionalLiteral {
+                                        head: ConditionalHead::AtomicFormula(
+                                            AtomicFormula::Literal(Literal {
+                                                sign: Sign::NoSign,
+                                                atom: Atom {
+                                                    predicate_symbol: "a".into(),
+                                                    terms: vec![],
+                                                },
+                                            }),
+                                        ),
+                                        conditions: ConditionalBody { formulas: vec![] },
                                     },
-                                })],
+                                )],
                             },
                         },
                     ],

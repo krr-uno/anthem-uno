@@ -5,11 +5,11 @@ use {
         parsing::fol::sigma_0::pest::{
             AnnotatedFormulaParser, AtomParser, AtomicFormulaParser, BinaryConnectiveParser,
             BinaryOperatorParser, ComparisonParser, DirectionParser, FormulaParser,
-            FunctionConstantParser, GeneralTermParser, GuardParser, IntegerTermParser,
-            PlaceholderDeclarationParser, PredicateParser, QuantificationParser, QuantifierParser,
-            RelationParser, RoleParser, SortParser, SpecificationParser, SymbolicTermParser,
-            TheoryParser, UnaryConnectiveParser, UnaryOperatorParser, UserGuideEntryParser,
-            UserGuideParser, VariableParser,
+            FunctionConstantParser, FunctionParser, GeneralTermParser, GuardParser,
+            IntegerTermParser, PlaceholderDeclarationParser, PredicateParser, QuantificationParser,
+            QuantifierParser, RelationParser, RoleParser, SortParser, SpecificationParser,
+            SymbolicTermParser, TheoryParser, UnaryConnectiveParser, UnaryOperatorParser,
+            UserGuideEntryParser, UserGuideParser, VariableParser,
         },
         simplifying::fol::sigma_0::intuitionistic::join_nested_quantifiers,
         syntax_tree::{GenericPredicate, Node, impl_node},
@@ -154,6 +154,33 @@ impl SymbolicTerm {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct Function {
+    pub function_symbol: String,
+    pub sort: Sort,
+    pub terms: Vec<GeneralTerm>,
+}
+
+impl_node!(Function, Format, FunctionParser);
+
+impl Function {
+    pub fn variables(&self) -> IndexSet<Variable> {
+        let mut vars = IndexSet::new();
+        for term in self.terms.iter() {
+            vars.extend(term.variables());
+        }
+        vars
+    }
+
+    pub fn function_constants(&self) -> IndexSet<FunctionConstant> {
+        let mut constants = IndexSet::new();
+        for term in self.terms.iter() {
+            constants.extend(term.function_constants());
+        }
+        constants
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum GeneralTerm {
     Infimum,
     Supremum,
@@ -161,6 +188,7 @@ pub enum GeneralTerm {
     Variable(String),
     IntegerTerm(IntegerTerm),
     SymbolicTerm(SymbolicTerm),
+    Function(Function),
 }
 
 impl_node!(GeneralTerm, Format, GeneralTermParser);
@@ -177,12 +205,14 @@ impl GeneralTerm {
             }]),
             GeneralTerm::IntegerTerm(t) => t.variables(),
             GeneralTerm::SymbolicTerm(t) => t.variables(),
+            GeneralTerm::Function(f) => f.variables(),
         }
     }
 
     pub fn symbols(&self) -> IndexSet<String> {
         match &self {
             GeneralTerm::SymbolicTerm(t) => t.symbols(),
+            GeneralTerm::Function { .. } => todo!(),
             _ => IndexSet::new(),
         }
     }
@@ -198,6 +228,7 @@ impl GeneralTerm {
             GeneralTerm::Infimum | GeneralTerm::Supremum | GeneralTerm::Variable(_) => {
                 IndexSet::new()
             }
+            GeneralTerm::Function(f) => f.function_constants(),
         }
     }
 

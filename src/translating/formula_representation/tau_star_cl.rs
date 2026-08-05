@@ -9,8 +9,8 @@ use {
             asp::mini_gringo_cl as asp,
             fol::sigma_0::{
                 Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula,
-                GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation, Sort,
-                SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
+                Function, GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation,
+                Sort, SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
             },
         },
     },
@@ -60,11 +60,11 @@ fn choose_fresh_ijk(taken_variables: IndexSet<Variable>) -> IndexMap<String, Var
 // Z = t
 fn construct_equality_formula(term: asp::Term, z: Variable) -> Formula {
     let rhs = match term {
-        asp::Term::PrecomputedTerm(t) => match t {
-            asp::PrecomputedTerm::Infimum => GeneralTerm::Infimum,
-            asp::PrecomputedTerm::Supremum => GeneralTerm::Supremum,
-            asp::PrecomputedTerm::Numeral(i) => GeneralTerm::IntegerTerm(IntegerTerm::Numeral(i)),
-            asp::PrecomputedTerm::Symbol(s) => GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol(s)),
+        asp::Term::BasicSymbol(t) => match t {
+            asp::BasicSymbol::Infimum => GeneralTerm::Infimum,
+            asp::BasicSymbol::Supremum => GeneralTerm::Supremum,
+            asp::BasicSymbol::Numeral(i) => GeneralTerm::IntegerTerm(IntegerTerm::Numeral(i)),
+            asp::BasicSymbol::Symbol(s) => GeneralTerm::SymbolicTerm(SymbolicTerm::Symbol(s)),
         },
         asp::Term::Variable(v) => GeneralTerm::Variable(v.0),
         _ => unreachable!(
@@ -577,6 +577,62 @@ fn construct_gsix_partial_function_formula(
     }
 }
 
+// c(t1, ..., tk)
+// exists X1 ... Xk ( val_t1(X1) & ... val_tk(Xk) & Z = c(X1, ..., Xk) )
+fn construct_herbrand_formula(
+    symbol: String,
+    terms: Vec<asp::Term>,
+    z: Variable,
+    taken_variables: IndexSet<Variable>,
+) -> Formula {
+    let fresh_var_names = taken_variables.choose_fresh_variables("X", terms.len());
+    let variables: Vec<Variable> = fresh_var_names
+        .iter()
+        .map(|n| Variable {
+            name: n.into(),
+            sort: Sort::General,
+        })
+        .collect();
+
+    // val_t1(X1) & ... val_tk(Xk)
+    let mut formulas = Vec::new();
+    for (i, term) in terms.iter().enumerate() {
+        formulas.push(val(
+            term.clone(),
+            variables[i].clone(),
+            taken_variables.clone(),
+        ));
+    }
+
+    // Z = c(X1, ..., Xk)
+    formulas.push(Formula::AtomicFormula(AtomicFormula::Comparison(
+        Comparison {
+            term: GeneralTerm::Variable(z.name),
+            guards: vec![Guard {
+                relation: Relation::Equal,
+                term: GeneralTerm::Function(Function {
+                    function_symbol: symbol,
+                    sort: Sort::Symbol,
+                    terms: fresh_var_names
+                        .iter()
+                        .map(|n| GeneralTerm::Variable(n.into()))
+                        .collect(),
+                }),
+            }],
+        },
+    )));
+
+    let inner = Formula::conjoin(formulas);
+
+    Formula::QuantifiedFormula {
+        quantification: Quantification {
+            quantifier: Quantifier::Exists,
+            variables,
+        },
+        formula: inner.into(),
+    }
+}
+
 // val_t(Z)
 fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formula {
     let mut taken_variables = taken_variables;
@@ -595,10 +651,13 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
     }
 
     match t {
-        asp::Term::PrecomputedTerm(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
+        asp::Term::BasicSymbol(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
+        asp::Term::HerbrandFunction { symbol, terms } => {
+            construct_herbrand_formula(symbol, terms, z, taken_variables)
+        }
         asp::Term::UnaryOperation { op, arg } => match op {
             asp::UnaryOperator::Negative => {
-                let lhs = asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Numeral(0)); // Shorthand for 0 - t
+                let lhs = asp::Term::BasicSymbol(asp::BasicSymbol::Numeral(0)); // Shorthand for 0 - t
                 let valti = val(lhs, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
                 let valtj = val(*arg, fresh_int_vars["J"].clone(), taken_variables); // val_t2(J)
                 construct_total_function_formula(
@@ -1142,6 +1201,7 @@ mod tests {
     #[test]
     fn test_val() {
         for (term, var, target) in [
+            ("f(a)", "Z1", "exists X$g (X$g = a and Z1$g = f$s(X$g))"),
             (
                 "X + 1",
                 "Z1",

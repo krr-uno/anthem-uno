@@ -186,6 +186,12 @@ pub enum ExternalEquivalenceTaskError {
     ProofOutlineError(#[from] ProofOutlineError),
 }
 
+impl From<Box<ProofOutlineError>> for ExternalEquivalenceTaskError {
+    fn from(value: Box<ProofOutlineError>) -> Self {
+        ExternalEquivalenceTaskError::ProofOutlineError(*value)
+    }
+}
+
 impl Display for ExternalEquivalenceTaskError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -364,6 +370,7 @@ pub struct ExternalEquivalenceTask {
 }
 
 impl ExternalEquivalenceTask {
+    #[allow(clippy::result_large_err)]
     fn ensure_program_tightness(
         &self,
         program: &asp::Program,
@@ -382,6 +389,7 @@ impl ExternalEquivalenceTask {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_absence_of_private_recursion(
         &self,
         program: &asp::Program,
@@ -400,6 +408,7 @@ impl ExternalEquivalenceTask {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_input_and_output_predicates_are_disjoint(
         &self,
     ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
@@ -420,6 +429,7 @@ impl ExternalEquivalenceTask {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_rule_heads_do_not_contain_input_predicates(
         &self,
         program: &asp::Program,
@@ -445,6 +455,7 @@ impl ExternalEquivalenceTask {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_specification_assumptions_do_not_contain_output_predicates(
         &self,
         specification: &fol::Specification,
@@ -472,6 +483,7 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()))
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_placeholder_name_uniqueness(
         &self,
     ) -> Result<(), ExternalEquivalenceTaskWarning, ExternalEquivalenceTaskError> {
@@ -492,6 +504,7 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()))
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_assumptions_only_contain_valid_predicates(
         &self,
         formulas: &Vec<fol::AnnotatedFormula>,
@@ -520,6 +533,7 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()).preface_warnings(sequence.warnings))
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_specs_only_contain_valid_predicates(
         &self,
         formulas: &Vec<fol::AnnotatedFormula>,
@@ -548,6 +562,7 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()).preface_warnings(sequence.warnings))
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_user_guide_assumptions_only_contain_input_symbols(
         &self,
         formulas: &Vec<fol::AnnotatedFormula>,
@@ -572,6 +587,7 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()))
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_specification_roles_are_supported(
         &self,
         formulas: &Vec<fol::AnnotatedFormula>,
@@ -592,6 +608,7 @@ impl ExternalEquivalenceTask {
         Ok(WithWarnings::flawless(()))
     }
 
+    #[allow(clippy::result_large_err)]
     fn ensure_valid_definition_sequence(
         specification: &Vec<fol::AnnotatedFormula>,
         user_guide: &fol::UserGuide,
@@ -726,6 +743,7 @@ impl Task for ExternalEquivalenceTask {
             }
         }
 
+        #[allow(clippy::result_large_err)]
         let theory_translate = |program: asp::Program| {
             let translation = match self.formula_representation {
                 FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {

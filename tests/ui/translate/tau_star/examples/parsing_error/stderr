@@ -3,4 +3,4 @@ Error:  --> 2:13
 2 | p(X) :- q(X++1), not r(X).
   |             ^---
   |
-  = expected precomputed_term, variable, negative, or absolute_valued_term
+  = expected basic_symbol, symbol, variable, negative, or absolute_valued_term
