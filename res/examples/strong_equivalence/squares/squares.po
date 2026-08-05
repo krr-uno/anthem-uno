@@ -1,0 +1,1 @@
+lemma: forall N$ ( (-N$)*(-N$) = N$*N$ ).
