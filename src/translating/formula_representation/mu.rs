@@ -21,9 +21,9 @@ impl Mu for asp::Program {
             match natural::natural_rule(&r) {
                 Some(f) => match natural::make_formula_completable(f, &globals) {
                     Some(formula) => formulas.push(formula),
-                    None => formulas.push(tau_star::tau_star_rule(&r, &globals, dialect)),
+                    None => formulas.push(tau_star::tau_star_rule(r, &globals, dialect)),
                 },
-                None => formulas.push(tau_star::tau_star_rule(&r, &globals, dialect)),
+                None => formulas.push(tau_star::tau_star_rule(r, &globals, dialect)),
             }
         }
 
@@ -43,18 +43,20 @@ mod tests {
 
     #[test]
     fn test_mu() {
-        for (source, target) in [
+        for (source, dialect, target) in [
             (
                 "p(X) :- q(X). q(4/2).",
-                "forall V1 X (q(X) and X = V1 -> p(V1)). forall V1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and (I$i = 4 and J$i = 2) and (J$i != 0 and R$i >= 0 and R$i < J$i) and V1 = Q$i) and #true -> q(V1)).",
+                Dialect::GringoSix,
+                "forall V1 X (q(X) and X = V1 -> p(V1)). forall V1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = 4 and J$i = 2 and (J$i != 0 and R$i >= 0 and R$i < J$i) and V1 = Q$i) -> q(V1)).",
             ),
             (
                 "p(X) :- q(1..5), a(X). q(1..3) :- p(X).",
+                Dialect::GringoSix,
                 "forall V1 X (V1 = X and (exists Z (exists I$i J$i K$i (I$i = 1 and J$i = 5 and Z = K$i and I$i <= K$i <= J$i) and q(Z)) and exists Z (Z = X and a(Z))) -> p(V1)).\nforall N0$i V1 X (p(X) and 1 <= N0$i <= 3 and N0$i = V1 -> q(V1)).",
             ),
         ] {
             let program = source.parse::<asp::Program>().unwrap();
-            let mu: fol::Theory = program.mu(Dialect::GringoFive);
+            let mu: fol::Theory = program.mu(dialect);
             let mu_string = mu.to_string();
             let target_theory: fol::Theory = target.parse().unwrap();
             let target = target_theory.to_string();

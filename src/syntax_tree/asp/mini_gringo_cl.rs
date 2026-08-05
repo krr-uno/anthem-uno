@@ -100,9 +100,7 @@ pub enum BinaryOperator {
     Subtract,
     Multiply,
     Divide,
-    DivideInteger,
     Modulo,
-    ModuloInteger,
     Interval,
 }
 
@@ -115,9 +113,7 @@ impl From<asp::mini_gringo::BinaryOperator> for BinaryOperator {
             asp::mini_gringo::BinaryOperator::Subtract => BinaryOperator::Subtract,
             asp::mini_gringo::BinaryOperator::Multiply => BinaryOperator::Multiply,
             asp::mini_gringo::BinaryOperator::Divide => BinaryOperator::Divide,
-            asp::mini_gringo::BinaryOperator::DivideInteger => BinaryOperator::DivideInteger,
             asp::mini_gringo::BinaryOperator::Modulo => BinaryOperator::Modulo,
-            asp::mini_gringo::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
             asp::mini_gringo::BinaryOperator::Interval => BinaryOperator::Interval,
         }
     }
@@ -130,9 +126,7 @@ impl From<asp::gringo::BinaryOperator> for BinaryOperator {
             asp::gringo::BinaryOperator::Subtract => BinaryOperator::Subtract,
             asp::gringo::BinaryOperator::Multiply => BinaryOperator::Multiply,
             asp::gringo::BinaryOperator::Divide => BinaryOperator::Divide,
-            asp::gringo::BinaryOperator::DivideInteger => BinaryOperator::DivideInteger,
             asp::gringo::BinaryOperator::Modulo => BinaryOperator::Modulo,
-            asp::gringo::BinaryOperator::ModuloInteger => BinaryOperator::ModuloInteger,
             asp::gringo::BinaryOperator::Interval => BinaryOperator::Interval,
         }
     }
