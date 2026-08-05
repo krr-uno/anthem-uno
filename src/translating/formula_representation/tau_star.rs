@@ -1,5 +1,6 @@
 use {
     crate::{
+        command_line::arguments::Dialect,
         convenience::variable_selection::VariableSelection,
         syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
     },
@@ -814,7 +815,7 @@ fn tau_star_constraint_rule(r: &asp::Rule) -> fol::Formula {
 }
 
 // Translate a rule using a pre-defined list of global variables
-pub(crate) fn tau_star_rule(r: &asp::Rule, globals: &[String]) -> fol::Formula {
+pub(crate) fn tau_star_rule(r: &asp::Rule, globals: &[String], dialect: Dialect) -> fol::Formula {
     match r.head.predicate() {
         Some(_) => {
             if r.head.arity() > 0 {
@@ -832,11 +833,11 @@ pub(crate) fn tau_star_rule(r: &asp::Rule, globals: &[String]) -> fol::Formula {
 // For each rule, produce a formula: forall G V ( val_t(V) & tau_body(Body) -> p(V) )
 // Where G is all variables from the original rule
 // and V is the set of fresh variables replacing t within p
-fn tau_star(p: asp::Program) -> fol::Theory {
+fn tau_star(p: asp::Program, dialect: Dialect) -> fol::Theory {
     let globals = choose_fresh_global_variables(&p);
     let mut formulas: Vec<fol::Formula> = vec![]; // { forall G V ( val_t(V) & tau^B(Body) -> p(V) ), ... }
     for r in p.rules.iter() {
-        formulas.push(tau_star_rule(r, &globals));
+        formulas.push(tau_star_rule(r, &globals, dialect));
     }
     fol::Theory { formulas }
 }
@@ -844,19 +845,21 @@ fn tau_star(p: asp::Program) -> fol::Theory {
 pub trait TauStar {
     type Output;
 
-    fn tau_star(self) -> Self::Output;
+    fn tau_star(self, dialect: Dialect) -> Self::Output;
 }
 
 impl TauStar for asp::Program {
     type Output = fol::Theory;
 
-    fn tau_star(self) -> Self::Output {
-        tau_star(self)
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
+        tau_star(self, dialect)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::command_line::arguments::Dialect;
+
     use super::{choose_fresh_global_variables, tau_b, tau_star, val};
 
     #[test]
@@ -1000,7 +1003,7 @@ mod tests {
                 "forall V1 X (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and (I$i = X and J$i = 2) and (J$i != 0 and R$i >= 0 and R$i < J$i) and V1 = Q$i) and exists Z Z1 (Z = X and Z1 = 4 and Z = Z1) -> p(V1)).",
             ),
         ] {
-            let left = tau_star(src.parse().unwrap());
+            let left = tau_star(src.parse().unwrap(), Dialect::GringoFive);
             let right = target.parse().unwrap();
 
             assert!(

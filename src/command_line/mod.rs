@@ -1,4 +1,5 @@
 use crate::{
+    command_line::arguments::Dialect,
     syntax_tree::{
         asp::{mini_gringo, mini_gringo_cl},
         fol::sigma_0 as fol,
@@ -18,10 +19,10 @@ pub(crate) enum Program {
 impl TauStar for Program {
     type Output = fol::Theory;
 
-    fn tau_star(self) -> Self::Output {
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
         match self {
-            Program::MiniGringo(program) => program.tau_star(),
-            Program::MiniGringoCl(program) => program.tau_star(),
+            Program::MiniGringo(program) => program.tau_star(dialect),
+            Program::MiniGringoCl(program) => program.tau_star(dialect),
         }
     }
 }

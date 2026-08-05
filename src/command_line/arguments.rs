@@ -74,6 +74,10 @@ pub enum Command {
         #[arg(long, value_enum)]
         with: Translation,
 
+        /// The dialect governs which tau-star variant is applied in translation
+        #[arg(long, value_enum, default_value_t)]
+        dialect: Dialect,
+
         // Display formulas as LaTex
         #[arg(long, action)]
         display_latex: bool,
@@ -95,6 +99,14 @@ pub enum Command {
         /// The translation used to obtain the program's formula representation
         #[arg(long, value_enum, default_value_t)]
         formula_representation: FormulaRepresentation,
+
+        /// The dialect of the program
+        #[arg(long, value_enum, default_value_t)]
+        program_dialect: Dialect,
+
+        /// The dialect of the specification (if it is a logic program)
+        #[arg(long, value_enum, default_value_t)]
+        spec_dialect: Dialect,
 
         /// The direction of the proof
         #[arg(long, value_enum, default_value_t)]
@@ -173,6 +185,13 @@ pub enum Fragment {
     MiniGringo,
     #[default]
     MiniGringoCL,
+}
+
+#[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Dialect {
+    #[default]
+    GringoFive,
+    GringoSix,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

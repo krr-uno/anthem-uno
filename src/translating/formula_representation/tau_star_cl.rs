@@ -1,6 +1,7 @@
 use {
     super::tau_star::TauStar,
     crate::{
+        command_line::arguments::Dialect,
         convenience::{apply::Apply, compose::Compose, variable_selection::VariableSelection},
         simplifying::fol::sigma_0::intuitionistic::{
             remove_conjunctive_identities, remove_empty_quantifications, remove_orphaned_variables,
@@ -1181,7 +1182,7 @@ fn tau_star(p: asp::Program) -> Theory {
 impl TauStar for asp::Program {
     type Output = Theory;
 
-    fn tau_star(self) -> Self::Output {
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
         tau_star(self)
     }
 }

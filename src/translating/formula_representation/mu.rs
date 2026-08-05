@@ -1,4 +1,5 @@
 use crate::{
+    command_line::arguments::Dialect,
     syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
     translating::formula_representation::{natural, tau_star},
 };
@@ -6,13 +7,13 @@ use crate::{
 pub trait Mu {
     type Output;
 
-    fn mu(self) -> Self::Output;
+    fn mu(self, dialect: Dialect) -> Self::Output;
 }
 
 impl Mu for asp::Program {
     type Output = fol::Theory;
 
-    fn mu(self) -> Self::Output {
+    fn mu(self, dialect: Dialect) -> Self::Output {
         let mut formulas: Vec<fol::Formula> = vec![];
         let globals = tau_star::choose_fresh_global_variables(&self);
 
@@ -20,9 +21,9 @@ impl Mu for asp::Program {
             match natural::natural_rule(&r) {
                 Some(f) => match natural::make_formula_completable(f, &globals) {
                     Some(formula) => formulas.push(formula),
-                    None => formulas.push(tau_star::tau_star_rule(&r, &globals)),
+                    None => formulas.push(tau_star::tau_star_rule(&r, &globals, dialect)),
                 },
-                None => formulas.push(tau_star::tau_star_rule(&r, &globals)),
+                None => formulas.push(tau_star::tau_star_rule(&r, &globals, dialect)),
             }
         }
 
@@ -34,7 +35,10 @@ impl Mu for asp::Program {
 mod tests {
     use {
         super::Mu as _,
-        crate::syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        crate::{
+            command_line::arguments::Dialect,
+            syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
+        },
     };
 
     #[test]
@@ -50,7 +54,7 @@ mod tests {
             ),
         ] {
             let program = source.parse::<asp::Program>().unwrap();
-            let mu: fol::Theory = program.mu();
+            let mu: fol::Theory = program.mu(Dialect::GringoFive);
             let mu_string = mu.to_string();
             let target_theory: fol::Theory = target.parse().unwrap();
             let target = target_theory.to_string();

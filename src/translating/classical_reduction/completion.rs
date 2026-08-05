@@ -242,6 +242,7 @@ mod tests {
     use indexmap::IndexSet;
 
     use crate::{
+        command_line::arguments::Dialect,
         syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
         translating::{
             classical_reduction::completion::{Completion as _, atomic_formula_from},
@@ -340,7 +341,7 @@ mod tests {
             let left = src
                 .parse::<asp::Program>()
                 .unwrap()
-                .tau_star()
+                .tau_star(Dialect::GringoFive)
                 .completion(inputs)
                 .unwrap();
             let right = target.parse().unwrap();
