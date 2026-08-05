@@ -21,6 +21,7 @@ fn translate_examples() {
             .arg("translate")
             .arg("--with")
             .arg("tau-star")
+            .arg("--dialect=gringo-five")
             .arg(program)
             .assert();
 
