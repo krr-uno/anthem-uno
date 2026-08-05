@@ -176,8 +176,19 @@ impl TryFrom<mini_gringo_cl::Term> for Term {
 }
 
 impl Term {
-    pub fn precomputed(&self) -> bool {
+    pub fn ground(&self) -> bool {
         self.variables().is_empty()
+    }
+
+    pub fn contains_arithmetic(&self) -> bool {
+        match &self {
+            Term::BasicSymbol(_) | Term::Variable(_) => false,
+            Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
+        }
+    }
+
+    pub fn precomputed(&self) -> bool {
+        self.ground() && !self.contains_arithmetic()
     }
 
     pub fn variables(&self) -> IndexSet<Variable> {
