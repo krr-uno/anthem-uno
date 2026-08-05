@@ -743,6 +743,7 @@ impl Task for ExternalEquivalenceTask {
             }
         }
 
+        #[allow(clippy::result_large_err)]
         let theory_translate = |program: asp::Program| {
             let translation = match self.formula_representation {
                 FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {
