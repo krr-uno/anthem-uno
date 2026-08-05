@@ -1,6 +1,7 @@
 use {
     super::tau_star::TauStar,
     crate::{
+        command_line::arguments::Dialect,
         convenience::{apply::Apply, compose::Compose, variable_selection::VariableSelection},
         simplifying::fol::sigma_0::intuitionistic::{
             remove_conjunctive_identities, remove_empty_quantifications, remove_orphaned_variables,
@@ -24,7 +25,7 @@ pub const PREPROCESS: &[fn(Formula) -> Formula] = &[
 ];
 
 /// Choose fresh variants of `Vn` by incrementing `n`
-fn choose_fresh_global_variables(program: &asp::Program) -> Vec<String> {
+pub(crate) fn choose_fresh_global_variables(program: &asp::Program) -> Vec<String> {
     let max_arity = program.max_arity();
     program.choose_fresh_variables("V", max_arity)
 }
@@ -538,7 +539,7 @@ fn construct_gsix_partial_function_formula(
 
     match binop {
         // exists I J Q R (F4(IJQR) & Z = Q)
-        asp::BinaryOperator::DivideInteger => Formula::QuantifiedFormula {
+        asp::BinaryOperator::Divide => Formula::QuantifiedFormula {
             quantification,
             formula: Formula::BinaryFormula {
                 connective: BinaryConnective::Conjunction,
@@ -556,7 +557,7 @@ fn construct_gsix_partial_function_formula(
         },
 
         // exists I J Q R (F4(IJQR) & Z = R)
-        asp::BinaryOperator::ModuloInteger => Formula::QuantifiedFormula {
+        asp::BinaryOperator::Modulo => Formula::QuantifiedFormula {
             quantification,
             formula: Formula::BinaryFormula {
                 connective: BinaryConnective::Conjunction,
@@ -584,6 +585,7 @@ fn construct_herbrand_formula(
     terms: Vec<asp::Term>,
     z: Variable,
     taken_variables: IndexSet<Variable>,
+    dialect: Dialect,
 ) -> Formula {
     let fresh_var_names = taken_variables.choose_fresh_variables("X", terms.len());
     let variables: Vec<Variable> = fresh_var_names
@@ -601,6 +603,7 @@ fn construct_herbrand_formula(
             term.clone(),
             variables[i].clone(),
             taken_variables.clone(),
+            dialect,
         ));
     }
 
@@ -634,7 +637,12 @@ fn construct_herbrand_formula(
 }
 
 // val_t(Z)
-fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formula {
+fn val(
+    t: asp::Term,
+    z: Variable,
+    taken_variables: IndexSet<Variable>,
+    dialect: Dialect,
+) -> Formula {
     let mut taken_variables = taken_variables;
     taken_variables.insert(z.clone());
     for var in t.variables().iter() {
@@ -653,13 +661,18 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
     match t {
         asp::Term::BasicSymbol(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
         asp::Term::HerbrandFunction { symbol, terms } => {
-            construct_herbrand_formula(symbol, terms, z, taken_variables)
+            construct_herbrand_formula(symbol, terms, z, taken_variables, dialect)
         }
         asp::Term::UnaryOperation { op, arg } => match op {
             asp::UnaryOperator::Negative => {
                 let lhs = asp::Term::BasicSymbol(asp::BasicSymbol::Numeral(0)); // Shorthand for 0 - t
-                let valti = val(lhs, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
-                let valtj = val(*arg, fresh_int_vars["J"].clone(), taken_variables); // val_t2(J)
+                let valti = val(
+                    lhs,
+                    fresh_int_vars["I"].clone(),
+                    taken_variables.clone(),
+                    dialect,
+                ); // val_t1(I)
+                let valtj = val(*arg, fresh_int_vars["J"].clone(), taken_variables, dialect); // val_t2(J)
                 construct_total_function_formula(
                     valti,
                     valtj,
@@ -670,13 +683,23 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
                 )
             }
             asp::UnaryOperator::AbsoluteValue => {
-                let valti = val(*arg, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
+                let valti = val(
+                    *arg,
+                    fresh_int_vars["I"].clone(),
+                    taken_variables.clone(),
+                    dialect,
+                ); // val_t1(I)
                 construct_absolute_value_formula(valti, fresh_int_vars["I"].clone(), z)
             }
         },
         asp::Term::BinaryOperation { op, lhs, rhs } => {
-            let valti = val(*lhs, fresh_int_vars["I"].clone(), taken_variables.clone()); // val_t1(I)
-            let valtj = val(*rhs, fresh_int_vars["J"].clone(), taken_variables); // val_t2(J)
+            let valti = val(
+                *lhs,
+                fresh_int_vars["I"].clone(),
+                taken_variables.clone(),
+                dialect,
+            ); // val_t1(I)
+            let valtj = val(*rhs, fresh_int_vars["J"].clone(), taken_variables, dialect); // val_t2(J)
             match op {
                 asp::BinaryOperator::Add
                 | asp::BinaryOperator::Subtract
@@ -688,8 +711,8 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
                     fresh_int_vars["J"].clone(),
                     z,
                 ),
-                asp::BinaryOperator::Divide | asp::BinaryOperator::Modulo => {
-                    construct_gfive_partial_function_formula(
+                asp::BinaryOperator::Divide | asp::BinaryOperator::Modulo => match dialect {
+                    Dialect::GringoFive => construct_gfive_partial_function_formula(
                         valti,
                         valtj,
                         op,
@@ -697,18 +720,16 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
                         fresh_int_vars["J"].clone(),
                         fresh_int_vars["K"].clone(),
                         z,
-                    )
-                }
-                asp::BinaryOperator::DivideInteger | asp::BinaryOperator::ModuloInteger => {
-                    construct_gsix_partial_function_formula(
+                    ),
+                    Dialect::GringoSix => construct_gsix_partial_function_formula(
                         valti,
                         valtj,
                         op,
                         fresh_int_vars["I"].clone(),
                         fresh_int_vars["J"].clone(),
                         z,
-                    )
-                }
+                    ),
+                },
                 asp::BinaryOperator::Interval => construct_interval_formula(
                     valti,
                     valtj,
@@ -723,17 +744,17 @@ fn val(t: asp::Term, z: Variable, taken_variables: IndexSet<Variable>) -> Formul
 }
 
 // val_t1(Z1) & val_t2(Z2) & ... & val_tn(Zn)
-fn valtz(mut terms: Vec<asp::Term>, mut variables: Vec<Variable>) -> Formula {
+fn valtz(mut terms: Vec<asp::Term>, mut variables: Vec<Variable>, dialect: Dialect) -> Formula {
     Formula::conjoin(
         terms
             .drain(..)
             .zip(variables.drain(..))
-            .map(|(t, v)| val(t, v, IndexSet::new())),
+            .map(|(t, v)| val(t, v, IndexSet::new(), dialect)),
     )
 }
 
 // Translate a body literal
-fn tau_b_literal(l: asp::Literal, taken_vars: IndexSet<Variable>) -> Formula {
+fn tau_b_literal(l: asp::Literal, taken_vars: IndexSet<Variable>, dialect: Dialect) -> Formula {
     let atom = l.atom;
     let terms = atom.terms;
     let arity = terms.len();
@@ -747,7 +768,7 @@ fn tau_b_literal(l: asp::Literal, taken_vars: IndexSet<Variable>) -> Formula {
             sort: Sort::General,
         })
         .collect();
-    let val_t_z = valtz(terms, vars.clone());
+    let val_t_z = valtz(terms, vars.clone(), dialect);
 
     // Compute p(Z1, Z2, ..., Zk)
     let var_terms: Vec<GeneralTerm> = vars.iter().cloned().map(GeneralTerm::from).collect();
@@ -804,7 +825,11 @@ fn tau_b_literal(l: asp::Literal, taken_vars: IndexSet<Variable>) -> Formula {
 }
 
 // Translate a body comparison
-fn tau_b_comparison(c: asp::Comparison, taken_vars: IndexSet<Variable>) -> Formula {
+fn tau_b_comparison(
+    c: asp::Comparison,
+    taken_vars: IndexSet<Variable>,
+    dialect: Dialect,
+) -> Formula {
     let varnames = taken_vars.choose_fresh_variables("Z", 2);
 
     // Compute val_t1(Z1) & val_t2(Z2)
@@ -821,8 +846,8 @@ fn tau_b_comparison(c: asp::Comparison, taken_vars: IndexSet<Variable>) -> Formu
 
     let valtz = Formula::BinaryFormula {
         connective: BinaryConnective::Conjunction,
-        lhs: val(c.lhs, var_z1.clone(), taken_vars.clone()).into(),
-        rhs: val(c.rhs, var_z2.clone(), taken_vars).into(),
+        lhs: val(c.lhs, var_z1.clone(), taken_vars.clone(), dialect).into(),
+        rhs: val(c.rhs, var_z2.clone(), taken_vars, dialect).into(),
     };
 
     Formula::QuantifiedFormula {
@@ -847,7 +872,7 @@ fn tau_b_comparison(c: asp::Comparison, taken_vars: IndexSet<Variable>) -> Formu
 }
 
 // Translate a body literal or comparison
-fn tau_b(f: asp::AtomicFormula) -> Formula {
+fn tau_b(f: asp::AtomicFormula, dialect: Dialect) -> Formula {
     let mut taken_vars = IndexSet::new();
     for var in f.variables().iter() {
         taken_vars.insert(Variable {
@@ -856,13 +881,17 @@ fn tau_b(f: asp::AtomicFormula) -> Formula {
         });
     }
     match f {
-        asp::AtomicFormula::Literal(l) => tau_b_literal(l, taken_vars),
-        asp::AtomicFormula::Comparison(c) => tau_b_comparison(c, taken_vars),
+        asp::AtomicFormula::Literal(l) => tau_b_literal(l, taken_vars, dialect),
+        asp::AtomicFormula::Comparison(c) => tau_b_comparison(c, taken_vars, dialect),
     }
 }
 
 // Translate a conditional literal l of the first kind with global variables z
-fn tau_b_gfive_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula {
+fn tau_b_gfive_cl(
+    l: asp::ConditionalLiteral,
+    z: &IndexSet<asp::Variable>,
+    dialect: Dialect,
+) -> Formula {
     let head = l.head.clone();
     let conditions = l.conditions.formulas.clone();
 
@@ -875,13 +904,13 @@ fn tau_b_gfive_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Fo
     local_vars.retain(|v| !(z.contains(v) || global_cl_vars.contains(v)));
 
     let consequent = match head {
-        asp::ConditionalHead::AtomicFormula(a) => tau_b(a.clone()),
+        asp::ConditionalHead::AtomicFormula(a) => tau_b(a.clone(), dialect),
         asp::ConditionalHead::Falsity => Formula::AtomicFormula(AtomicFormula::Falsity),
     };
 
     let mut formulas = vec![];
     for c in conditions.iter() {
-        formulas.push(tau_b(c.clone()));
+        formulas.push(tau_b(c.clone(), dialect));
     }
     let antecedent = Formula::conjoin(formulas);
 
@@ -914,7 +943,7 @@ fn tau_b_gfive_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Fo
     }
 }
 
-fn gsix_cl_consequent(head: asp::ConditionalHead) -> Formula {
+fn gsix_cl_consequent(head: asp::ConditionalHead, dialect: Dialect) -> Formula {
     match head.clone() {
         asp::ConditionalHead::AtomicFormula(a) => match a {
             asp::AtomicFormula::Literal(literal) => {
@@ -943,7 +972,7 @@ fn gsix_cl_consequent(head: asp::ConditionalHead) -> Formula {
 
                 let inner = Formula::BinaryFormula {
                     connective: BinaryConnective::Implication,
-                    lhs: valtz(literal.atom.terms, vars.clone()).into(),
+                    lhs: valtz(literal.atom.terms, vars.clone(), dialect).into(),
                     rhs: match literal.sign {
                         asp::Sign::NoSign => new_atom,
                         asp::Sign::Negation => Formula::UnaryFormula {
@@ -1001,7 +1030,7 @@ fn gsix_cl_consequent(head: asp::ConditionalHead) -> Formula {
 
                 let inner = Formula::BinaryFormula {
                     connective: BinaryConnective::Implication,
-                    lhs: valtz(vec![comparison.lhs, comparison.rhs], vars.clone()).into(),
+                    lhs: valtz(vec![comparison.lhs, comparison.rhs], vars.clone(), dialect).into(),
                     rhs: new_comp.into(),
                 };
 
@@ -1020,18 +1049,22 @@ fn gsix_cl_consequent(head: asp::ConditionalHead) -> Formula {
 }
 
 // Translate a conditional literal l of the second kind with global variables z
-fn tau_b_gsix_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> Formula {
+fn tau_b_gsix_cl(
+    l: asp::ConditionalLiteral,
+    z: &IndexSet<asp::Variable>,
+    dialect: Dialect,
+) -> Formula {
     let head = l.head.clone();
     let conditions = l.conditions.formulas.clone();
 
     let mut local_vars = l.variables();
     local_vars.retain(|v| !z.contains(v));
 
-    let consequent = gsix_cl_consequent(head);
+    let consequent = gsix_cl_consequent(head, dialect);
 
     let mut formulas = vec![];
     for c in conditions.iter() {
-        formulas.push(tau_b(c.clone()));
+        formulas.push(tau_b(c.clone(), dialect));
     }
     let antecedent = Formula::conjoin(formulas);
 
@@ -1062,15 +1095,15 @@ fn tau_b_gsix_cl(l: asp::ConditionalLiteral, z: &IndexSet<asp::Variable>) -> For
 }
 
 // Translate a rule body
-fn tau_body(b: asp::Body, z: IndexSet<asp::Variable>) -> Formula {
+fn tau_body(b: asp::Body, z: IndexSet<asp::Variable>, dialect: Dialect) -> Formula {
     let mut formulas = Vec::new();
     for f in b.formulas.iter() {
         match f {
             asp::BodyLiteral::GfiveConditionalLiteral(cl) => {
-                formulas.push(tau_b_gfive_cl(cl.clone(), &z))
+                formulas.push(tau_b_gfive_cl(cl.clone(), &z, dialect))
             }
             asp::BodyLiteral::GsixConditionalLiteral(cl) => {
-                formulas.push(tau_b_gsix_cl(cl.clone(), &z))
+                formulas.push(tau_b_gsix_cl(cl.clone(), &z, dialect))
             }
         }
     }
@@ -1078,10 +1111,10 @@ fn tau_body(b: asp::Body, z: IndexSet<asp::Variable>) -> Formula {
 }
 
 // Translate a rule using a pre-defined list of global variables
-fn tau_star_rule(r: asp::Rule, globals: &[String]) -> Formula {
+pub(crate) fn tau_star_rule(r: asp::Rule, globals: &[String], dialect: Dialect) -> Formula {
     let mut prep = [PREPROCESS].concat().into_iter().compose();
 
-    let body = tau_body(r.body.clone(), r.global_variables());
+    let body = tau_body(r.body.clone(), r.global_variables(), dialect);
 
     match r.head.predicate() {
         Some(predicate) => {
@@ -1100,7 +1133,7 @@ fn tau_star_rule(r: asp::Rule, globals: &[String]) -> Formula {
 
             // val_t1(V1) & ... & val_tk(Vk)
             let val_t_v = match r.head.terms() {
-                Some(terms) => valtz(terms.to_vec(), kvars.clone()),
+                Some(terms) => valtz(terms.to_vec(), kvars.clone(), dialect),
                 None => Formula::AtomicFormula(AtomicFormula::Truth),
             };
 
@@ -1169,11 +1202,14 @@ fn tau_star_rule(r: asp::Rule, globals: &[String]) -> Formula {
     .apply_fixpoint(&mut prep)
 }
 
-fn tau_star(p: asp::Program) -> Theory {
+// For each rule, produce a formula: forall G V ( val_t(V) & tau_body(Body) -> p(V) )
+// Where G is all variables from the original rule
+// and V is the set of fresh variables replacing t within p
+fn tau_star(p: asp::Program, dialect: Dialect) -> Theory {
     let globals = choose_fresh_global_variables(&p);
     let mut formulas: Vec<Formula> = vec![]; // { forall G V ( val_t(V) & tau^B(Body) -> p(V) ), ... }
     for r in p.rules {
-        formulas.push(tau_star_rule(r, &globals));
+        formulas.push(tau_star_rule(r, &globals, dialect));
     }
     Theory { formulas }
 }
@@ -1181,15 +1217,18 @@ fn tau_star(p: asp::Program) -> Theory {
 impl TauStar for asp::Program {
     type Output = Theory;
 
-    fn tau_star(self) -> Self::Output {
-        tau_star(self)
+    fn tau_star(self, dialect: Dialect) -> Self::Output {
+        tau_star(self, dialect)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{tau_b, tau_b_gfive_cl, tau_star, tau_star_rule, val, valtz};
+    use super::{
+        choose_fresh_global_variables, tau_b, tau_b_gfive_cl, tau_star, tau_star_rule, val, valtz,
+    };
     use crate::{
+        command_line::arguments::Dialect,
         syntax_tree::{
             asp::mini_gringo_cl::{self as asp, BodyLiteral},
             fol::sigma_0 as fol,
@@ -1199,41 +1238,73 @@ mod tests {
     use indexmap::IndexSet;
 
     #[test]
+    fn test_choose_variables() {
+        for (program, variables) in [
+            ("p(X) :- q(X,Y).", Vec::from_iter(["V1"])),
+            ("p(X,V1) :- q(X,V3).", Vec::from_iter(["V4", "V5"])),
+            (
+                "p(V2) :- q(X,Y). q(X,Y,Z) :- X = Y, Y = Z.",
+                Vec::from_iter(["V3", "V4", "V5"]),
+            ),
+        ] {
+            let chosen = choose_fresh_global_variables(&program.parse().unwrap());
+            let target: Vec<String> = variables.iter().map(|v| v.to_string()).collect();
+            assert_eq!(chosen, target);
+        }
+    }
+
+    #[test]
     fn test_val() {
-        for (term, var, target) in [
-            ("f(a)", "Z1", "exists X$g (X$g = a and Z1$g = f$s(X$g))"),
+        for (term, dialect, var, target) in [
+            (
+                "f(a)",
+                Dialect::GringoFive,
+                "Z1",
+                "exists X$g (X$g = a and Z1$g = f$s(X$g))",
+            ),
             (
                 "X + 1",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i (Z1$g = I$i + J$i and I$i = X and J$i = 1)",
             ),
             (
                 "3 - 5",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i (Z1$g = I$i - J$i and I$i = 3 and J$i = 5)",
             ),
             (
                 "Xanadu/Yak",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i K$i (I$i = Xanadu and J$i = Yak and K$i * |J$i| <= |I$i| < (K$i + 1) * |J$i| and ((I$i * J$i >= 0 and Z1 = K$i) or (I$i * J$i < 0 and Z1 = -K$i)))",
             ),
             (
                 "X \\ 3",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i K$i (I$i = X and J$i = 3 and K$i * |J$i| <= |I$i| < (K$i + 1) * |J$i| and ((I$i * J$i >= 0 and Z1 = I$i - K$i * J$i) or (I$i * J$i < 0 and Z1 = I$i + K$i * J$i)))",
             ),
             (
                 "X..Y",
+                Dialect::GringoFive,
                 "Z",
                 "exists I$i J$i K$i (I$i = X and J$i = Y and Z$g = K$i and I$i <= K$i <= J$i)",
             ),
             (
                 "X+1..Y",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i K$i ((exists I1$i J1$i (I$i = I1$i + J1$i and I1$i = X and J1$i = 1)) and J$i = Y and Z1 = K$i and I$i <= K$i <= J$i)",
             ),
         ] {
-            let left = val(term.parse().unwrap(), var.parse().unwrap(), IndexSet::new());
+            let left = val(
+                term.parse().unwrap(),
+                var.parse().unwrap(),
+                IndexSet::new(),
+                dialect,
+            );
             let right = target.parse().unwrap();
 
             assert!(
@@ -1245,19 +1316,25 @@ mod tests {
 
     #[test]
     fn test_valtz() {
-        for (term, var, target) in [
+        for (term, dialect, var, target) in [
             (
                 "X + 1",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i (Z1$g = I$i + J$i and I$i = X and J$i = 1)",
             ),
             (
                 "3 - (1..5)",
+                Dialect::GringoFive,
                 "Z1",
                 "exists I$i J$i (Z1$g = I$i - J$i and I$i = 3 and exists I1$i J1$i K1$i (I1$i = 1 and J1$i = 5 and J$i = K1$i and I1$i <= K1$i <= J1$i))",
             ),
         ] {
-            let left = valtz(vec![term.parse().unwrap()], vec![var.parse().unwrap()]);
+            let left = valtz(
+                vec![term.parse().unwrap()],
+                vec![var.parse().unwrap()],
+                dialect,
+            );
             let right = target.parse().unwrap();
 
             assert!(
@@ -1269,45 +1346,61 @@ mod tests {
 
     #[test]
     fn test_tau_b() {
-        for (src, target) in [
-            ("p(t)", "exists Z (Z = t and p(Z))"),
-            ("not p(t)", "exists Z (Z = t and not p(Z))"),
+        for (src, dialect, target) in [
+            ("p(t)", Dialect::GringoFive, "exists Z (Z = t and p(Z))"),
+            (
+                "not p(t)",
+                Dialect::GringoFive,
+                "exists Z (Z = t and not p(Z))",
+            ),
             (
                 "X < 1..5",
+                Dialect::GringoFive,
                 "exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = 1 and J$i = 5 and Z1 = K$i and I$i <= K$i <= J$i) and Z < Z1)",
             ),
-            ("not not p(t)", "exists Z (Z = t and not not p(Z))"),
-            ("not not x", "not not x"),
+            (
+                "not not p(t)",
+                Dialect::GringoFive,
+                "exists Z (Z = t and not not p(Z))",
+            ),
+            ("not not x", Dialect::GringoFive, "not not x"),
             (
                 "not p(X,5)",
+                Dialect::GringoFive,
                 "exists Z Z1 (Z = X and Z1 = 5 and not p(Z,Z1))",
             ),
             (
                 "not p(X,0-5)",
+                Dialect::GringoFive,
                 "exists Z Z1 (Z = X and exists I$i J$i (Z1 = I$i - J$i and I$i = 0 and J$i = 5) and not p(Z,Z1))",
             ),
             (
                 "p(X,-1..5)",
+                Dialect::GringoFive,
                 "exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = -1 and J$i = 5 and Z1 = K$i and I$i <= K$i <= J$i) and p(Z,Z1))",
             ),
             (
                 "p(X,-(1..5))",
+                Dialect::GringoFive,
                 "exists Z Z1 (Z = X and exists I$i J$i (Z1 = I$i - J$i and I$i = 0 and exists I1$i J1$i K1$i (I1$i = 1 and J1$i = 5  and J$i = K1$i and I1$i <= K1$i <= J1$i)) and p(Z,Z1))",
             ),
             (
                 "p(1/0)",
+                Dialect::GringoFive,
                 "exists Z (exists I$i J$i K$i (I$i = 1 and J$i = 0 and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and p(Z))",
             ),
             (
-                "X // Y > 5",
+                "X / Y > 5",
+                Dialect::GringoSix,
                 "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = Q$i) and Z1 = 5 and Z > Z1)",
             ),
             (
-                "X @ Y > 5",
+                "X \\ Y > 5",
+                Dialect::GringoSix,
                 "exists Z Z1 (exists I$i J$i Q$i R$i (I$i = J$i * Q$i + R$i and I$i = X and J$i = Y and (J$i != 0 and R$i >= 0 and R$i < J$i) and Z = R$i) and Z1 = 5 and Z > Z1)",
             ),
         ] {
-            let left = tau_b(src.parse().unwrap());
+            let left = tau_b(src.parse().unwrap(), dialect);
             let right = target.parse().unwrap();
 
             assert!(
@@ -1319,12 +1412,13 @@ mod tests {
 
     #[test]
     fn test_tau_b_cl() {
-        for (src, target) in [
+        for (src, dialect, target) in [
             (
                 (
                     "q(X)",
                     IndexSet::from_iter(vec![asp::Variable("X".to_string())]),
                 ),
+                Dialect::GringoFive,
                 "exists Z (Z = X and q(Z))",
             ),
             (
@@ -1332,6 +1426,7 @@ mod tests {
                     "not asg(V,I) : color(I)",
                     IndexSet::from_iter(vec![asp::Variable("V".to_string())]),
                 ),
+                Dialect::GringoFive,
                 "forall I (exists Z (Z = I and color(Z)) -> exists Z Z1 (Z = V and Z1 = I and not asg(Z, Z1)))",
             ),
             (
@@ -1342,6 +1437,7 @@ mod tests {
                         asp::Variable("Y".to_string()),
                     ]),
                 ),
+                Dialect::GringoFive,
                 "(exists Z Z1 (Z = X and Z1 = Y and p(Z,Z1)) and exists Z (Z = Y and q(Z))) -> #false",
             ),
             (
@@ -1352,6 +1448,7 @@ mod tests {
                         asp::Variable("Y".to_string()),
                     ]),
                 ),
+                Dialect::GringoFive,
                 "forall Z ((exists Z1 (Z1 = Z and p(Z1)) and exists Z1 Z2 (Z1 = X and Z2 = Z and Z1 < Z2) and exists Z1 Z2 (Z1 = Z and Z2 = Y and Z1 < Z2)) -> exists Z1 (Z1 = Z and not p(Z1)) )",
             ),
             (
@@ -1362,6 +1459,7 @@ mod tests {
                         asp::Variable("Y".to_string()),
                     ]),
                 ),
+                Dialect::GringoFive,
                 "forall Z ((exists Z1 (Z1 = Z and p(Z1)) and exists Z1 Z2 (Z1 = X and Z2 = Z and Z1 < Z2) and exists Z1 Z2 (Z1 = Z and Z2 = Y and Z1 < Z2)) -> #false )",
             ),
             (
@@ -1369,24 +1467,27 @@ mod tests {
                     "p(X,Y) : not q(X/Y)",
                     IndexSet::from_iter(vec![asp::Variable("X".to_string())]),
                 ),
+                Dialect::GringoFive,
                 "forall Y (exists Z (exists I$i J$i K$i (I$i = X and J$i = Y and (K$i * |J$i| <= |I$i| < (K$i+1) * |J$i|) and ((I$i * J$i >= 0 and Z = K$i) or (I$i*J$i < 0 and Z = -K$i)) ) and not q(Z)) -> exists Z Z1 (Z = X and Z1 = Y and p(Z, Z1)))",
             ),
             (
                 ("X = 1..3 : q(X)", IndexSet::new()),
+                Dialect::GringoFive,
                 "forall X (exists Z (Z = X and q(Z)) -> exists Z Z1 (Z = X and exists I$i J$i K$i (I$i = 1 and J$i = 3 and Z1 = K$i and I$i <= K$i <= J$i) and Z = Z1) )",
             ),
             (
                 ("X = 1..3 :: q(X)", IndexSet::new()),
+                Dialect::GringoFive,
                 "forall X (exists Z (Z = X and q(Z)) -> forall V V1 (V = X and exists I$i J$i K$i (I$i = 1 and J$i = 3 and V1 = K$i and I$i <= K$i <= J$i) -> V = V1) )",
             ),
         ] {
             let cl: BodyLiteral = src.0.parse().unwrap();
             let src = match cl {
                 BodyLiteral::GfiveConditionalLiteral(conditional_literal) => {
-                    tau_b_gfive_cl(conditional_literal, &src.1)
+                    tau_b_gfive_cl(conditional_literal, &src.1, dialect)
                 }
                 BodyLiteral::GsixConditionalLiteral(conditional_literal) => {
-                    tau_b_gsix_cl(conditional_literal, &src.1)
+                    tau_b_gsix_cl(conditional_literal, &src.1, dialect)
                 }
             };
             let target = target.parse().unwrap();
@@ -1439,7 +1540,7 @@ mod tests {
         ] {
             let rule: asp::Rule = src.0.parse().unwrap();
             let src = fol::Theory {
-                formulas: vec![tau_star_rule(rule, &src.1)],
+                formulas: vec![tau_star_rule(rule, &src.1, Dialect::GringoFive)],
             };
             let target = fol::Theory {
                 formulas: vec![target.parse().unwrap()],
@@ -1492,7 +1593,7 @@ mod tests {
                 "forall V1 X (V1 = X and forall Y (exists Z Z1 (Z = X and Z1 = Y and q(Z, Z1)) -> exists Z Z1 (Z = X and Z1 = Y and p(Z, Z1))) -> r(V1)).",
             ),
         ] {
-            let left = tau_star(src.parse().unwrap());
+            let left = tau_star(src.parse().unwrap(), Dialect::GringoFive);
             let right = target.parse().unwrap();
 
             assert!(

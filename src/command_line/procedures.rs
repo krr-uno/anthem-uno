@@ -7,7 +7,7 @@ use {
         command_line::{
             Program,
             arguments::{
-                Arguments, Command, Equivalence, Fragment, Normalization, Output, ParseAs,
+                Arguments, Command, Dialect, Equivalence, Fragment, Normalization, Output, ParseAs,
                 Property, SimplificationPortfolio, SimplificationStrategy, Translation,
                 Visualization,
             },
@@ -106,7 +106,9 @@ pub fn main() -> Result<()> {
                         )?;
                         let intensional_predicates =
                             program.predicates().into_iter().map(|p| p.into()).collect();
-                        let is_tight = program.tau_star().is_tight(intensional_predicates);
+                        let is_tight = program
+                            .tau_star(Dialect::GringoFive)
+                            .is_tight(intensional_predicates);
                         println!("{is_tight}");
                     }
                 },
@@ -222,6 +224,7 @@ pub fn main() -> Result<()> {
 
         Command::Translate {
             with,
+            dialect,
             input,
             display_latex,
         } => {
@@ -231,14 +234,14 @@ pub fn main() -> Result<()> {
                         Some(path) => match fol::Theory::from_file(&path) {
                             Ok(theory) => Ok(theory),
                             Err(_) => match asp::mini_gringo::Program::from_file(path) {
-                                Ok(program) => Ok(program.tau_star()),
+                                Ok(program) => Ok(program.tau_star(dialect)),
                                 Err(e) => Err(e),
                             },
                         },
                         None => match fol::Theory::from_stdin() {
                             Ok(theory) => Ok(theory),
                             Err(_) => match asp::mini_gringo::Program::from_stdin() {
-                                Ok(program) => Ok(program.tau_star()),
+                                Ok(program) => Ok(program.tau_star(dialect)),
                                 Err(e) => Err(e),
                             },
                         },
@@ -258,7 +261,7 @@ pub fn main() -> Result<()> {
                 Translation::Mu => {
                     let program = get_program_of_unknown_fragment(input)?;
                     match program {
-                        Program::MiniGringo(program) => program.mu(),
+                        Program::MiniGringo(program) => program.mu(dialect),
                         Program::MiniGringoCl(_) => todo!(),
                     }
                 }
@@ -275,7 +278,7 @@ pub fn main() -> Result<()> {
 
                 Translation::TauStar => {
                     let program = get_program_of_unknown_fragment(input)?;
-                    program.tau_star()
+                    program.tau_star(dialect)
                 }
             };
 
@@ -319,6 +322,8 @@ pub fn main() -> Result<()> {
             files,
             formula_representation,
             backend,
+            program_dialect,
+            spec_dialect,
         } => {
             let start_time = Instant::now();
 
@@ -348,6 +353,8 @@ pub fn main() -> Result<()> {
                             .proof_outline()
                             .map(fol::Specification::from_file)
                             .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                        program_dialect,
+                        spec_dialect,
                         decomposition,
                         direction,
                         simplify: !no_simplify,
@@ -381,6 +388,8 @@ pub fn main() -> Result<()> {
                         .proof_outline()
                         .map(fol::Specification::from_file)
                         .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                    program_dialect,
+                    spec_dialect,
                     decomposition,
                     direction,
                     formula_representation,

@@ -22,7 +22,7 @@ mod internal {
             PrattParser::new()
                 .op(Op::infix(interval, Left))
                 .op(Op::infix(add, Left) | Op::infix(subtract, Left))
-                .op(Op::infix(multiply, Left) | Op::infix(divide_integer, Left) | Op::infix(divide, Left) | Op::infix(modulo_integer, Left) | Op::infix(modulo, Left))
+                .op(Op::infix(multiply, Left) | Op::infix(divide, Left) | Op::infix(modulo, Left))
                 .op(Op::prefix(negative))
         };
     }
@@ -98,9 +98,7 @@ impl PestParser for BinaryOperatorParser {
             internal::Rule::add => BinaryOperator::Add,
             internal::Rule::subtract => BinaryOperator::Subtract,
             internal::Rule::multiply => BinaryOperator::Multiply,
-            internal::Rule::divide_integer => BinaryOperator::DivideInteger,
             internal::Rule::divide => BinaryOperator::Divide,
-            internal::Rule::modulo_integer => BinaryOperator::ModuloInteger,
             internal::Rule::modulo => BinaryOperator::Modulo,
             internal::Rule::interval => BinaryOperator::Interval,
             _ => Self::report_unexpected_pair(pair),
@@ -658,10 +656,8 @@ mod tests {
             ("+", BinaryOperator::Add),
             ("-", BinaryOperator::Subtract),
             ("*", BinaryOperator::Multiply),
-            ("//", BinaryOperator::DivideInteger),
             ("/", BinaryOperator::Divide),
             ("\\", BinaryOperator::Modulo),
-            ("@", BinaryOperator::ModuloInteger),
             ("..", BinaryOperator::Interval),
         ]);
     }
@@ -833,25 +829,9 @@ mod tests {
                     },
                 ),
                 (
-                    "1 // A",
-                    Term::BinaryOperation {
-                        op: BinaryOperator::DivideInteger,
-                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
-                        rhs: Term::Variable(Variable("A".into())).into(),
-                    },
-                ),
-                (
                     "1 \\ A",
                     Term::BinaryOperation {
                         op: BinaryOperator::Modulo,
-                        lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
-                        rhs: Term::Variable(Variable("A".into())).into(),
-                    },
-                ),
-                (
-                    "1 @ A",
-                    Term::BinaryOperation {
-                        op: BinaryOperator::ModuloInteger,
                         lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
                         rhs: Term::Variable(Variable("A".into())).into(),
                     },

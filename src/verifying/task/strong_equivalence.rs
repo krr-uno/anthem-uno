@@ -1,6 +1,6 @@
 use {
     crate::{
-        command_line::arguments::Decomposition,
+        command_line::arguments::{Decomposition, Dialect},
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
@@ -109,6 +109,8 @@ pub struct StrongEquivalenceTask {
     pub proof_outline: fol::Specification,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
+    pub program_dialect: Dialect,
+    pub spec_dialect: Dialect,
     pub simplify: bool,
     pub break_equivalences: bool,
 }
@@ -172,8 +174,14 @@ impl Task for StrongEquivalenceTask {
 
         let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
 
-        let mut left = self.left.tau_star();
-        let mut right = self.right.tau_star();
+        let mut left = match self.spec_dialect {
+            Dialect::GringoFive => self.left.tau_star(Dialect::GringoFive),
+            Dialect::GringoSix => self.left.tau_star(Dialect::GringoSix),
+        };
+        let mut right = match self.program_dialect {
+            Dialect::GringoFive => self.right.tau_star(Dialect::GringoFive),
+            Dialect::GringoSix => self.right.tau_star(Dialect::GringoSix),
+        };
 
         let placeholders = match &self.user_guide {
             Some(ug) => ug

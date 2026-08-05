@@ -1,5 +1,6 @@
 use {
     crate::{
+        command_line::arguments::Dialect,
         convenience::{
             apply::Apply,
             compose::Compose,
@@ -212,7 +213,7 @@ impl mini_gringo_cl::Program {
         &self,
         intensional_predicates: IndexSet<mini_gringo_cl::Predicate>,
     ) -> DiGraph<String, i32> {
-        let formula_representation = self.clone().tau_star();
+        let formula_representation = self.clone().tau_star(Dialect::GringoFive);
         let intensional: IndexSet<fol::Predicate> = intensional_predicates
             .into_iter()
             .map(|p| p.into())
@@ -242,7 +243,9 @@ impl Tightness for mini_gringo::Program {
 
 impl Tightness for mini_gringo_cl::Program {
     fn is_tight(&self, intensional_predicates: IndexSet<GenericPredicate>) -> bool {
-        self.clone().tau_star().is_tight(intensional_predicates)
+        self.clone()
+            .tau_star(Dialect::GringoFive)
+            .is_tight(intensional_predicates)
     }
 }
 

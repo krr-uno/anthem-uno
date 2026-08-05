@@ -2,7 +2,7 @@ use {
     crate::{
         analyzing::{private_recursion::PrivateRecursion, tightness::Tightness},
         breaking::fol::sigma_0::ht::break_equivalences_annotated_formula,
-        command_line::arguments::{Decomposition, FormulaRepresentation},
+        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation},
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
@@ -364,6 +364,8 @@ pub struct ExternalEquivalenceTask {
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
     pub formula_representation: FormulaRepresentation,
+    pub program_dialect: Dialect,
+    pub spec_dialect: Dialect,
     pub bypass_tightness: bool,
     pub simplify: bool,
     pub break_equivalences: bool,
@@ -744,11 +746,11 @@ impl Task for ExternalEquivalenceTask {
         }
 
         #[allow(clippy::result_large_err)]
-        let theory_translate = |program: asp::Program| {
+        let theory_translate = |program: asp::Program, dialect: Dialect| {
             let translation = match self.formula_representation {
                 FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {
                     Ok(prog) => Ok(prog
-                        .mu()
+                        .mu(dialect)
                         .replace_placeholders(&placeholders)
                         .completion(self.user_guide.input_predicates())
                         .expect("mu did not create a completable theory")),
@@ -759,7 +761,7 @@ impl Task for ExternalEquivalenceTask {
                     ),
                 },
                 FormulaRepresentation::TauStar => Ok(program
-                    .tau_star()
+                    .tau_star(dialect)
                     .replace_placeholders(&placeholders)
                     .completion(self.user_guide.input_predicates())
                     .expect("tau_star did not create a completable theory")),
@@ -812,11 +814,13 @@ impl Task for ExternalEquivalenceTask {
         };
 
         let left = match self.specification {
-            Either::Left(program) => control_translate(theory_translate(program)?),
+            Either::Left(program) => {
+                control_translate(theory_translate(program, self.spec_dialect)?)
+            }
             Either::Right(specification) => specification.replace_placeholders(&placeholders),
         };
 
-        let right = control_translate(theory_translate(self.program)?);
+        let right = control_translate(theory_translate(self.program, self.program_dialect)?);
 
         // TODO: Warn when a conflict between private predicates is encountered
         // TODO: Check if renaming creates new conflicts
