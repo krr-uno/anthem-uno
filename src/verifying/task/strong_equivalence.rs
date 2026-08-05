@@ -23,6 +23,23 @@ use {
     thiserror::Error,
 };
 
+#[allow(clippy::result_large_err)]
+fn ensure_absence_of_definitions(
+    outline: &ProofOutline,
+) -> Result<(), StrongEquivalenceTaskWarning, StrongEquivalenceTaskError> {
+    if let Some(definition) = outline.forward_definitions.first() {
+        Err(StrongEquivalenceTaskError::ProofOutlineContainsDefinition(
+            definition.clone(),
+        ))
+    } else if let Some(definition) = outline.backward_definitions.first() {
+        Err(StrongEquivalenceTaskError::ProofOutlineContainsDefinition(
+            definition.clone(),
+        ))
+    } else {
+        Ok(WithWarnings::flawless(()))
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum StrongEquivalenceTaskWarning {
     InvalidRoleWithinUserGuide(fol::AnnotatedFormula),
@@ -119,23 +136,6 @@ impl StrongEquivalenceTask {
 
         fol::Theory {
             formulas: predicates.into_iter().map(transition).collect(),
-        }
-    }
-
-    #[allow(clippy::result_large_err)]
-    fn ensure_absence_of_definitions(
-        outline: &ProofOutline,
-    ) -> Result<(), StrongEquivalenceTaskWarning, StrongEquivalenceTaskError> {
-        if let Some(definition) = outline.forward_definitions.first() {
-            Err(StrongEquivalenceTaskError::ProofOutlineContainsDefinition(
-                definition.clone(),
-            ))
-        } else if let Some(definition) = outline.backward_definitions.first() {
-            Err(StrongEquivalenceTaskError::ProofOutlineContainsDefinition(
-                definition.clone(),
-            ))
-        } else {
-            Ok(WithWarnings::flawless(()))
         }
     }
 
