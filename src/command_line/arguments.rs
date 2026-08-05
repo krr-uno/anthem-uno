@@ -26,6 +26,16 @@ pub enum Command {
         input: Option<PathBuf>,
     },
 
+    /// Normalize a logic program
+    Normalize {
+        /// The normalization to apply
+        #[arg(long, value_enum, default_value_t)]
+        with: Normalization,
+
+        /// The file to normalize
+        input: Option<PathBuf>,
+    },
+
     /// Parse a file and print its debug or output representation
     Parse {
         /// What to parse the input as

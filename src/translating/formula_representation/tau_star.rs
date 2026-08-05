@@ -21,13 +21,13 @@ fn construct_equality_formula(term: asp::Term, z: fol::Variable) -> fol::Formula
     };
 
     let rhs = match term {
-        asp::Term::PrecomputedTerm(t) => match t {
-            asp::PrecomputedTerm::Infimum => fol::GeneralTerm::Infimum,
-            asp::PrecomputedTerm::Supremum => fol::GeneralTerm::Supremum,
-            asp::PrecomputedTerm::Numeral(i) => {
+        asp::Term::BasicSymbol(t) => match t {
+            asp::BasicSymbol::Infimum => fol::GeneralTerm::Infimum,
+            asp::BasicSymbol::Supremum => fol::GeneralTerm::Supremum,
+            asp::BasicSymbol::Numeral(i) => {
                 fol::GeneralTerm::IntegerTerm(fol::IntegerTerm::Numeral(i))
             }
-            asp::PrecomputedTerm::Symbol(s) => {
+            asp::BasicSymbol::Symbol(s) => {
                 fol::GeneralTerm::SymbolicTerm(fol::SymbolicTerm::Symbol(s))
             }
         },
@@ -366,11 +366,11 @@ fn val(t: asp::Term, z: fol::Variable) -> fol::Formula {
         sort: fol::Sort::Integer,
     };
     match t {
-        asp::Term::PrecomputedTerm(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
+        asp::Term::BasicSymbol(_) | asp::Term::Variable(_) => construct_equality_formula(t, z),
         asp::Term::UnaryOperation { op, arg } => {
             match op {
                 asp::UnaryOperator::Negative => {
-                    let lhs = asp::Term::PrecomputedTerm(asp::PrecomputedTerm::Numeral(0)); // Shorthand for 0 - t
+                    let lhs = asp::Term::BasicSymbol(asp::BasicSymbol::Numeral(0)); // Shorthand for 0 - t
                     let valti = val(lhs, var1.clone()); // val_t1(I)
                     let valtj = val(*arg, var2.clone()); // val_t2(J)
                     construct_total_function_formula(

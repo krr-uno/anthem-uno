@@ -8,6 +8,7 @@ use {
             Program,
             arguments::{
                 Arguments, Command, Equivalence, Fragment, Output, ParseAs, Property,
+                Arguments, Command, Dialect, Equivalence, Normalization, Output, ParseAs, Property,
                 SimplificationPortfolio, SimplificationStrategy, Translation, Visualization,
             },
             files::Files,
@@ -16,6 +17,7 @@ use {
             apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
         },
         formatting::fol::sigma_0::latex,
+        normalizing::asp::numeric_normal::numeric_normal_form,
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp, fol::sigma_0 as fol},
         translating::{
@@ -286,6 +288,20 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
+
+        Command::Normalize { with, input } => {
+            let program = input.map_or_else(
+                asp::mini_gringo::Program::from_stdin,
+                asp::mini_gringo::Program::from_file,
+            )?;
+            let normalized_program = match with {
+                Normalization::NumericNormal => numeric_normal_form(program),
+            };
+            print!("{normalized_program}");
+
+            Ok(())
+        }
+
         Command::Verify {
             equivalence,
             decomposition,
