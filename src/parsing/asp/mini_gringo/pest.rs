@@ -34,11 +34,11 @@ impl PestParser for BasicSymbolParser {
 
     type InternalParser = internal::Parser;
     type Rule = internal::Rule;
-    const RULE: internal::Rule = internal::Rule::precomputed_term_eoi;
+    const RULE: internal::Rule = internal::Rule::basic_symbol_eoi;
 
     fn translate_pair(pair: pest::iterators::Pair<'_, Self::Rule>) -> Self::Node {
         match pair.as_rule() {
-            internal::Rule::precomputed_term => Self::translate_pairs(pair.into_inner()),
+            internal::Rule::basic_symbol => Self::translate_pairs(pair.into_inner()),
             internal::Rule::infimum => BasicSymbol::Infimum,
             internal::Rule::integer => BasicSymbol::Numeral(pair.as_str().parse().unwrap()),
             internal::Rule::symbol => BasicSymbol::Symbol(pair.as_str().into()),
@@ -130,7 +130,7 @@ impl PestParser for TermParser {
 
                     Term::HerbrandFunction { symbol, terms }
                 }
-                internal::Rule::precomputed_term => {
+                internal::Rule::basic_symbol => {
                     Term::BasicSymbol(BasicSymbolParser::translate_pair(primary))
                 }
                 internal::Rule::variable => Term::Variable(VariableParser::translate_pair(primary)),
@@ -473,7 +473,7 @@ mod tests {
     };
 
     #[test]
-    fn parse_precomputed_term() {
+    fn parse_basic_symbol() {
         BasicSymbolParser
             .should_parse_into([
                 ("#inf", BasicSymbol::Infimum),

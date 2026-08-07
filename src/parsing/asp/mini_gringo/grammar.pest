@@ -1,8 +1,8 @@
 WHITESPACE = _{ " " | NEWLINE }
 COMMENT = _{ "%" ~ (!NEWLINE ~ ANY)* ~ (NEWLINE | EOI) }
 
-precomputed_term = { infimum | integer | symbol | supremum }
-precomputed_term_eoi = _{ precomputed_term ~ EOI }
+basic_symbol = { infimum | integer | symbol | supremum }
+basic_symbol_eoi = _{ basic_symbol ~ EOI }
     infimum = @{ "#infimum" | "#inf" }
     integer = @{ "0" | "-"? ~ ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
     symbol = @{ !negation ~ "_"? ~ ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -28,7 +28,7 @@ herbrand_function = { symbol ~ term_tuple }
 
 term = { unary_operator* ~ primary_term ~ (binary_operator ~ unary_operator* ~ primary_term)* }
 term_eoi = _{ term ~ EOI }
-    primary_term = _{ herbrand_function | precomputed_term | variable | "(" ~ term ~ ")"}
+    primary_term = _{ herbrand_function | basic_symbol | variable | "(" ~ term ~ ")"}
 
 predicate = { symbol ~ "/" ~ arity }
 predicate_eoi = _{ predicate ~ EOI }
