@@ -24,6 +24,7 @@ fn term_replacement(
     rhs_of_numeric_equation: bool,
 ) -> (Term, Option<Comparison>) {
     match term {
+        Term::HerbrandFunction { symbol, terms } => todo!(),
         Term::BasicSymbol(ref pct) => {
             // abnormal term, case a
             if within_arithmetic_scope && !leading_symbol_is_arithmetic_compatible(pct) {
@@ -240,7 +241,7 @@ fn term_replacement_rule(rule: Rule) -> Rule {
 // innermost term replacement can occur in any order
 // so, remove abnormalities in the head, then the body constructs (DFS)
 // apply procedure until rule stops changing
-fn numeric_normal_form_rule(rule: Rule) -> Rule {
+pub(crate) fn numeric_normal_form_rule(rule: Rule) -> Rule {
     let mut previous = rule;
     let mut current = term_replacement_rule(previous.clone());
 

@@ -1,34 +1,22 @@
 use {
     crate::{
-        analyzing::{private_recursion::PrivateRecursion, tightness::Tightness},
-        breaking::fol::sigma_0::ht::break_equivalences_annotated_formula,
-        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation},
-        convenience::{
+        analyzing::{private_recursion::PrivateRecursion, tightness::Tightness}, breaking::fol::sigma_0::ht::break_equivalences_annotated_formula, command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment}, convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
-        },
-        simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{
+        }, normalizing::asp::numeric_normal::numeric_normal_form, simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC}, syntax_tree::{
             asp::{mini_gringo, mini_gringo_cl as asp},
             fol::sigma_0 as fol,
-        },
-        translating::{
-            classical_reduction::completion::Completion as _,
-            formula_representation::{mu::Mu as _, tau_star::TauStar as _},
-        },
-        verifying::{
+        }, translating::{
+            classical_reduction::completion::Completion as _, formula_representation::numeric_natural::numeric_natural, representation::{mu::Mu as _, tau_star::TauStar as _},
+        }, verifying::{
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
             problem::{self, Problem},
             task::Task,
         },
-    },
-    either::Either,
-    indexmap::{IndexMap, IndexSet},
-    std::fmt::Display,
-    thiserror::Error,
+    }, either::Either, indexmap::{IndexMap, IndexSet}, std::fmt::Display, thiserror::Error,
 };
 
 trait RenamePredicates {
@@ -170,7 +158,8 @@ pub struct InvalidPredicateErrorContent {
 
 #[derive(Error, Debug)]
 pub enum ExternalEquivalenceTaskError {
-    UnsupportedFormulaRepresentation(String),
+    //UnsupportedFormulaRepresentation(String),
+    UnsupportedLanguageFragmentForFormulaRepresentation(Fragment, FormulaRepresentation),
     NonTightProgram(asp::Program),
     ProgramContainsPrivateRecursion(asp::Program),
     InputOutputPredicatesOverlap(Vec<fol::Predicate>),
@@ -303,12 +292,12 @@ impl Display for ExternalEquivalenceTaskError {
                     "the role of the following formula is not supported in specifications: {formula}"
                 )
             }
-            ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(s) => {
-                writeln!(
-                    f,
-                    "program cannot be converted to a dialect for which mu is supported due to the following error: {s}"
-                )
-            }
+            // ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(s) => {
+            //     writeln!(
+            //         f,
+            //         "program cannot be converted to a dialect for which mu is supported due to the following error: {s}"
+            //     )
+            // }
             ExternalEquivalenceTaskError::SpecificationDefinesOutputPredicates(predicates) => {
                 write!(
                     f,
@@ -325,6 +314,12 @@ impl Display for ExternalEquivalenceTaskError {
 
                 writeln!(f)
             }
+            ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(frag, rep) => {
+                writeln!(
+                    f,
+                    "the specified formula-representation {rep} does not support {frag} programs"
+                )
+            },
         }
     }
 }
@@ -363,7 +358,7 @@ pub struct ExternalEquivalenceTask {
     pub proof_outline: fol::Specification,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
-    pub formula_representation: FormulaRepresentation,
+    pub representation: FormulaRepresentation,
     pub program_dialect: Dialect,
     pub spec_dialect: Dialect,
     pub bypass_tightness: bool,
@@ -747,25 +742,40 @@ impl Task for ExternalEquivalenceTask {
 
         #[allow(clippy::result_large_err)]
         let theory_translate = |program: asp::Program, dialect: Dialect| {
-            let translation = match self.formula_representation {
+            let translation =
+            match self.representation {
                 FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {
-                    Ok(prog) => Ok(prog
-                        .mu(dialect)
-                        .replace_placeholders(&placeholders)
-                        .completion(self.user_guide.input_predicates())
-                        .expect("mu did not create a completable theory")),
-                    Err(e) => Err(
-                        ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(
-                            e.to_string(),
-                        ),
-                    ),
+                    Ok(_) => todo!("mu isn't defined for programs with constructors"),
+                    Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::Mu)),
                 },
-                FormulaRepresentation::TauStar => Ok(program
-                    .tau_star(dialect)
-                    .replace_placeholders(&placeholders)
-                    .completion(self.user_guide.input_predicates())
-                    .expect("tau_star did not create a completable theory")),
+                FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(program) {
+                    Ok(program) => {
+                        let theory = numeric_natural(numeric_normal_form(program), dialect);
+                        Ok(theory.replace_placeholders(&placeholders).completion(self.user_guide.input_predicates()).expect("numeric-natural did not create a completable theory"))
+                    },
+                    Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural)),
+                },
+                FormulaRepresentation::TauStar => todo!(),
             };
+            // match self.representation {
+            //     FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {
+            //         Ok(prog) => Ok(prog
+            //             .mu(dialect)
+            //             .replace_placeholders(&placeholders)
+            //             .completion(self.user_guide.input_predicates())
+            //             .expect("mu did not create a completable theory")),
+            //         Err(e) => Err(
+            //             ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(
+            //                 e.to_string(),
+            //             ),
+            //         ),
+            //     },
+            //     FormulaRepresentation::TauStar => Ok(program
+            //         .tau_star(dialect)
+            //         .replace_placeholders(&placeholders)
+            //         .completion(self.user_guide.input_predicates())
+            //         .expect("tau_star did not create a completable theory")),
+            // };
 
             match translation {
                 Ok(mut theory) => {

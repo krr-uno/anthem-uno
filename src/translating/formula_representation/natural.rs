@@ -35,6 +35,7 @@ fn contains_symbol_or_infimum_or_supremum(t: &asp::Term) -> bool {
             contains_symbol_or_infimum_or_supremum(lhs)
                 || contains_symbol_or_infimum_or_supremum(rhs)
         }
+        _ => todo!(),
     }
 }
 

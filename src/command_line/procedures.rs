@@ -353,6 +353,7 @@ pub fn main() -> Result<()> {
                             .proof_outline()
                             .map(fol::Specification::from_file)
                             .unwrap_or_else(|| Ok(fol::Specification::empty()))?,
+                        representation: formula_representation,
                         program_dialect,
                         spec_dialect,
                         decomposition,
@@ -392,7 +393,7 @@ pub fn main() -> Result<()> {
                     spec_dialect,
                     decomposition,
                     direction,
-                    formula_representation,
+                    representation: formula_representation,
                     bypass_tightness,
                     simplify: !no_simplify,
                     break_equivalences: !no_eq_break,

@@ -1,26 +1,22 @@
 use {
     crate::{
-        command_line::arguments::{Decomposition, Dialect},
-        convenience::{
+        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment}, convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
-        },
-        simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{GenericPredicate, asp::mini_gringo_cl as asp, fol::sigma_0 as fol},
-        translating::{
+        }, normalizing::asp::numeric_normal::numeric_normal_form, simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC}, syntax_tree::{
+            GenericPredicate,
+            asp::{mini_gringo, mini_gringo_cl as asp},
+            fol::sigma_0 as fol,
+        }, translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
-            formula_representation::tau_star::TauStar,
-        },
-        verifying::{
+            formula_representation::{numeric_natural::numeric_natural, tau_star::TauStar},
+        }, verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
             problem::{self, AnnotatedFormula, Problem, Role},
             task::Task,
         },
-    },
-    indexmap::{IndexMap, IndexSet},
-    std::fmt::Display,
-    thiserror::Error,
+    }, indexmap::{IndexMap, IndexSet}, std::fmt::Display, thiserror::Error,
 };
 
 #[allow(clippy::result_large_err)]
@@ -72,6 +68,7 @@ pub enum StrongEquivalenceTaskError {
     PredicateInUserGuideAssumption(fol::AnnotatedFormula),
     ProofOutlineError(#[from] ProofOutlineError),
     ProofOutlineContainsDefinition(fol::AnnotatedFormula),
+    UnsupportedLanguageFragmentForFormulaRepresentation(Fragment, FormulaRepresentation),
 }
 
 impl From<Box<ProofOutlineError>> for StrongEquivalenceTaskError {
@@ -98,6 +95,12 @@ impl Display for StrongEquivalenceTaskError {
                     "strong equivalence proof outlines do not support definitions, e.g. {formula}"
                 )
             }
+            StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(frag, rep) => {
+                writeln!(
+                    f,
+                    "the specified formula-representation {rep} does not support {frag} programs"
+                )
+            }
         }
     }
 }
@@ -107,6 +110,7 @@ pub struct StrongEquivalenceTask {
     pub right: asp::Program,
     pub user_guide: Option<fol::UserGuide>,
     pub proof_outline: fol::Specification,
+    pub representation: FormulaRepresentation,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
     pub program_dialect: Dialect,
@@ -174,13 +178,28 @@ impl Task for StrongEquivalenceTask {
 
         let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
 
-        let mut left = match self.spec_dialect {
-            Dialect::GringoFive => self.left.tau_star(Dialect::GringoFive),
-            Dialect::GringoSix => self.left.tau_star(Dialect::GringoSix),
+        let mut left = match self.representation {
+            FormulaRepresentation::Mu => todo!(),
+            FormulaRepresentation::TauStar => self.left.tau_star(self.spec_dialect),
+            FormulaRepresentation::NumericNatural => {
+                match mini_gringo::Program::try_from(self.left) {
+                    Ok(program) => numeric_natural(numeric_normal_form(program), self.spec_dialect),
+                    Err(_) => return Err(StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural)),
+                }
+            }
         };
-        let mut right = match self.program_dialect {
-            Dialect::GringoFive => self.right.tau_star(Dialect::GringoFive),
-            Dialect::GringoSix => self.right.tau_star(Dialect::GringoSix),
+
+        let mut right = match self.representation {
+            FormulaRepresentation::Mu => todo!(),
+            FormulaRepresentation::TauStar => self.right.tau_star(self.program_dialect),
+            FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(
+                self.right,
+            ) {
+                Ok(program) => numeric_natural(numeric_normal_form(program), self.program_dialect),
+                Err(_) => return Err(
+                    StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural),
+                ),
+            },
         };
 
         let placeholders = match &self.user_guide {
