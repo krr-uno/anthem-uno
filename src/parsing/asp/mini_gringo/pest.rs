@@ -118,6 +118,18 @@ impl PestParser for TermParser {
         internal::PRATT_PARSER
             .map_primary(|primary| match primary.as_rule() {
                 internal::Rule::term => TermParser::translate_pair(primary),
+                internal::Rule::herbrand_function => {
+                    let mut pairs = primary.into_inner();
+
+                    let symbol = pairs
+                        .next()
+                        .unwrap_or_else(|| Self::report_missing_pair())
+                        .as_str()
+                        .into();
+                    let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+
+                    Term::HerbrandFunction { symbol, terms }
+                }
                 internal::Rule::precomputed_term => {
                     Term::BasicSymbol(BasicSymbolParser::translate_pair(primary))
                 }
