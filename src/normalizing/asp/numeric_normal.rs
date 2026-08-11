@@ -8,6 +8,8 @@ use crate::{
     },
 };
 
+// TODO: replace taken_vars parameter with mutable reference to taken_vars
+
 // basic symbols in sigma_0 include symbolic constants, numerals, inf, and sup
 // when we don't allow constructor functions, basic symbols are just the set of precomputed terms
 fn leading_symbol_is_arithmetic_compatible(term: &BasicSymbol) -> bool {
@@ -24,7 +26,35 @@ fn term_replacement(
     rhs_of_numeric_equation: bool,
 ) -> (Term, Option<Comparison>) {
     match term {
-        Term::HerbrandFunction { symbol, terms } => todo!(),
+        Term::HerbrandFunction { symbol, terms } => {
+            if within_arithmetic_scope {
+                let v = Variable(taken_vars.choose_fresh_variable("V"));
+                let v_equals_t = Comparison {
+                    relation: Relation::Equal,
+                    lhs: Term::Variable(v.clone()),
+                    rhs: Term::HerbrandFunction { symbol, terms },
+                };
+                (Term::Variable(v), Some(v_equals_t))
+            } else {
+                let mut v_equals_t = None;
+                let mut new_terms = terms.clone();
+                for (i, term) in terms.into_iter().enumerate() {
+                    let (current, vt) = term_replacement(term, taken_vars.clone(), false, false);
+                    if vt.is_some() {
+                        new_terms[i] = current;
+                        v_equals_t = vt;
+                        break;
+                    }
+                }
+                (
+                    Term::HerbrandFunction {
+                        symbol,
+                        terms: new_terms,
+                    },
+                    v_equals_t,
+                )
+            }
+        }
         Term::BasicSymbol(ref pct) => {
             // abnormal term, case a
             if within_arithmetic_scope && !leading_symbol_is_arithmetic_compatible(pct) {

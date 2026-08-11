@@ -1,22 +1,31 @@
 use {
     crate::{
-        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment}, convenience::{
+        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment},
+        convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
-        }, normalizing::asp::numeric_normal::numeric_normal_form, simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC}, syntax_tree::{
+        },
+        normalizing::asp::numeric_normal::numeric_normal_form,
+        simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
+        syntax_tree::{
             GenericPredicate,
             asp::{mini_gringo, mini_gringo_cl as asp},
             fol::sigma_0 as fol,
-        }, translating::{
+        },
+        translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
             formula_representation::{numeric_natural::numeric_natural, tau_star::TauStar},
-        }, verifying::{
+        },
+        verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
             problem::{self, AnnotatedFormula, Problem, Role},
             task::Task,
         },
-    }, indexmap::{IndexMap, IndexSet}, std::fmt::Display, thiserror::Error,
+    },
+    indexmap::{IndexMap, IndexSet},
+    std::fmt::Display,
+    thiserror::Error,
 };
 
 #[allow(clippy::result_large_err)]
@@ -95,7 +104,10 @@ impl Display for StrongEquivalenceTaskError {
                     "strong equivalence proof outlines do not support definitions, e.g. {formula}"
                 )
             }
-            StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(frag, rep) => {
+            StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(
+                frag,
+                rep,
+            ) => {
                 writeln!(
                     f,
                     "the specified formula-representation {rep} does not support {frag} programs"
@@ -197,7 +209,10 @@ impl Task for StrongEquivalenceTask {
             ) {
                 Ok(program) => numeric_natural(numeric_normal_form(program), self.program_dialect),
                 Err(_) => return Err(
-                    StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural),
+                    StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(
+                        Fragment::MiniGringoCL,
+                        FormulaRepresentation::NumericNatural,
+                    ),
                 ),
             },
         };

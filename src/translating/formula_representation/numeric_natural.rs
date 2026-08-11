@@ -1,6 +1,8 @@
 use crate::{
-    command_line::arguments::Dialect, syntax_tree::{
-        asp::mini_gringo as asp, fol::sigma_0::{
+    command_line::arguments::Dialect,
+    syntax_tree::{
+        asp::mini_gringo as asp,
+        fol::sigma_0::{
             self as fol, Formula, GeneralTerm, Guard, IntegerTerm, Sort, SymbolicTerm, Theory,
         },
     },
@@ -176,7 +178,7 @@ fn nu_literal(f: asp::AtomicFormula) -> Formula {
                     term: p2f(c.lhs, true),
                     guards: vec![Guard {
                         relation: c.relation.into(),
-                        term: p2f(c.rhs, false)
+                        term: p2f(c.rhs, false),
                     }],
                 }))
             } else {
@@ -184,11 +186,11 @@ fn nu_literal(f: asp::AtomicFormula) -> Formula {
                     term: p2f(c.lhs, false),
                     guards: vec![Guard {
                         relation: c.relation.into(),
-                        term: p2f(c.rhs, false)
+                        term: p2f(c.rhs, false),
                     }],
                 }))
             }
-        },
+        }
     }
 }
 

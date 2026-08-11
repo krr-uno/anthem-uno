@@ -15,7 +15,6 @@ use {
     },
     derive_more::derive::IntoIterator,
     indexmap::IndexSet,
-    std::fmt::Binary,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -268,7 +267,7 @@ impl Term {
                     op,
                     BinaryOperator::Divide | BinaryOperator::Modulo | BinaryOperator::Interval
                 ) {
-                    functions.insert(op.clone());
+                    functions.insert(*op);
                 }
                 functions.extend(lhs.indefinite_functions());
                 functions.extend(rhs.indefinite_functions());
@@ -493,19 +492,14 @@ impl Comparison {
     }
 
     pub(crate) fn indefinite_equality(self) -> bool {
-        if matches!(self.relation, Relation::Equal) && matches!(self.lhs, Term::Variable(v))
-        {
+        if matches!(self.relation, Relation::Equal) && matches!(self.lhs, Term::Variable(_)) {
             match self.rhs {
-                Term::BinaryOperation {
-                    op,
-                    ..
-                } => {
-                    if matches!(op, BinaryOperator::Divide | BinaryOperator::Modulo | BinaryOperator::Interval) {
-                        true
-                    } else {
-                        false
-                    }
-                },
+                Term::BinaryOperation { op, .. } => {
+                    matches!(
+                        op,
+                        BinaryOperator::Divide | BinaryOperator::Modulo | BinaryOperator::Interval
+                    )
+                }
                 _ => false,
             }
         } else {
