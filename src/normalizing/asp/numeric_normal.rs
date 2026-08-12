@@ -319,6 +319,11 @@ mod tests {
             ("1", true, false, "1"),
             ("1/0", false, false, "V0"),
             ("1/0", false, true, "1/0"),
+            // constructors
+            ("f(a)", false, false, "f(a)"),
+            ("f(a)", true, false, "V0"),
+            ("f(X,Y+1)", false, false, "f(X,Y+1)"),
+            ("f(X,a+1)", false, false, "f(X,V0+1)"),
             // unary op
             ("-(X+1)", false, false, "-(X+1)"),
             ("-(4-1)", false, false, "-(4-1)"),
@@ -338,6 +343,7 @@ mod tests {
             ("4-(a+1)", false, false, "4-(V0+1)"),
             ("4-(X+1)", true, false, "4-(X+1)"),
             ("4-(a+1)", true, false, "4-(V0+1)"),
+            ("4+f(a)", false, false, "4+V0"),
             ("(4*a)-(a+1)", false, false, "(4*V0)-(a+1)"),
             ("((4*(1-a))+b)-(a+1)", false, false, "((4*(1-V0))+b)-(a+1)"),
         ] {
@@ -387,6 +393,10 @@ mod tests {
             (
                 ":- 1/Y = 4, p(Y), q(Y/5).",
                 ":- V0 = 4, p(Y), q(V1), V0 = 1/Y, V1 = Y/5.",
+            ),
+            (
+                ":- not p(0, f(a, X+1, b-3)).",
+                ":- not p(0, f(a, X+1, V0-3)), V0 = b.",
             ),
         ] {
             let src = numeric_normal_form_rule(src.parse().unwrap());

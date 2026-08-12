@@ -29,7 +29,7 @@ fn construct_graphf_axiom(f: IndefiniteFunction, d: Dialect) -> fol::Formula {
                     ((I$ * J$ >= 0 and Z$ = I$ - K$ * J$) or (I$ * J$ < 0 and Z$ = I$ + K$ * J$))))".parse().unwrap()
         },
         (IndefiniteFunction::Division, Dialect::GringoSix) => {
-            "forall I$ J$ Q$ ( divisionGraph(I$,J$,Q$) <-> exists R$ (I$ = J$ * Q$ + R$ & J$ != 0 & 0 <= R$ < J$) )".parse().unwrap()
+            "forall I$ J$ Q$ ( divisionGraph(I$,J$,Q$) <-> exists R$ (I$ = J$ * Q$ + R$ and J$ != 0 and 0 <= R$ < J$) )".parse().unwrap()
         },
         (IndefiniteFunction::Modulo, Dialect::GringoSix) => {
             "forall I$ J$ R$ ( moduloGraph(I$,J$,R$) <-> exists Q$ (I$ = J$ * Q$ + R$ & J$ != 0 & 0 <= R$ < J$) )".parse().unwrap()
@@ -174,12 +174,17 @@ fn nu_literal(f: asp::AtomicFormula) -> Formula {
         }
         asp::AtomicFormula::Comparison(c) => {
             if c.clone().indefinite_equality() {
-                Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
-                    term: p2f(c.lhs, true),
-                    guards: vec![Guard {
-                        relation: c.relation.into(),
-                        term: p2f(c.rhs, false),
-                    }],
+                let (binop, t1, t2) = c.rhs.destructure_binary_operation().unwrap();
+                let predicate_symbol = match binop {
+                    asp::BinaryOperator::Divide => String::from("divisionGraph"),
+                    asp::BinaryOperator::Modulo => String::from("moduloGraph"),
+                    asp::BinaryOperator::Interval => String::from("intervalGraph"),
+                    _ => unreachable!("an indefinite equality cannot contain definite functions"),
+                };
+                let terms = vec![p2f(t1, true), p2f(t2, true), p2f(c.lhs, false)];
+                Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
+                    predicate_symbol,
+                    terms,
                 }))
             } else {
                 Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {

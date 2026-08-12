@@ -275,6 +275,7 @@ pub enum Translation {
     Gamma,
     Mu,
     Natural,
+    NumericNatural,
     TauStar,
 }
 

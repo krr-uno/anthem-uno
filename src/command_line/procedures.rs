@@ -17,12 +17,18 @@ use {
             apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
         },
         formatting::fol::sigma_0::latex,
-        normalizing::asp::numeric_normal::numeric_normal_form,
+        normalizing::asp::{
+            numeric_normal::numeric_normal_form,
+            standard_program::standardize_program,
+        },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp, fol::sigma_0 as fol},
         translating::{
             classical_reduction::{completion::Completion as _, gamma::Gamma as _},
-            formula_representation::{mu::Mu as _, natural::Natural as _, tau_star::TauStar as _},
+            formula_representation::{
+                mu::Mu as _, natural::Natural as _, numeric_natural::numeric_natural,
+                tau_star::TauStar as _,
+            },
         },
         verifying::{
             problem::Interpretation,
@@ -57,12 +63,19 @@ fn get_program_of_unknown_fragment(input: Option<PathBuf>) -> Result<Program> {
         None => io::read_to_string(stdin()).with_context(|| "could not read from stdin")?,
     };
 
-    match contents.parse::<asp::mini_gringo::Program>() {
-        Ok(program) => Ok(Program::MiniGringo(program)),
-        Err(_) => match contents.parse::<asp::mini_gringo_cl::Program>() {
-            Ok(program) => Ok(Program::MiniGringoCl(program)),
-            Err(e) => Err(e.into()),
-        },
+    match contents.parse::<asp::gringo::Program>() {
+        Ok(program) => {
+            // gringo is "syntax sugar" for mini-gringo-cl;
+            // standardize conversion should always succeed
+            let mgcl = standardize_program(program);
+            match asp::mini_gringo::Program::try_from(mgcl.clone()) {
+                // mini-gringo is a fragment of mini-gringo-cl
+                Ok(mg) => Ok(Program::MiniGringo(mg)),
+                // if conversion to mini-gringo fails, return the mini-gringo-cl program
+                Err(_) => Ok(Program::MiniGringoCl(mgcl)),
+            }
+        }
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -233,15 +246,15 @@ pub fn main() -> Result<()> {
                     let theory: fol::Theory = match input {
                         Some(path) => match fol::Theory::from_file(&path) {
                             Ok(theory) => Ok(theory),
-                            Err(_) => match asp::mini_gringo::Program::from_file(path) {
-                                Ok(program) => Ok(program.tau_star(dialect)),
+                            Err(_) => match asp::gringo::Program::from_file(path) {
+                                Ok(program) => Ok(standardize_program(program).tau_star(dialect)),
                                 Err(e) => Err(e),
                             },
                         },
                         None => match fol::Theory::from_stdin() {
                             Ok(theory) => Ok(theory),
-                            Err(_) => match asp::mini_gringo::Program::from_stdin() {
-                                Ok(program) => Ok(program.tau_star(dialect)),
+                            Err(_) => match asp::gringo::Program::from_stdin() {
+                                Ok(program) => Ok(standardize_program(program).tau_star(dialect)),
                                 Err(e) => Err(e),
                             },
                         },
@@ -262,7 +275,9 @@ pub fn main() -> Result<()> {
                     let program = get_program_of_unknown_fragment(input)?;
                     match program {
                         Program::MiniGringo(program) => program.mu(dialect),
-                        Program::MiniGringoCl(_) => todo!(),
+                        Program::MiniGringoCl(_) => {
+                            todo!("mu is not yet supported for mini-gringo-cl programs")
+                        }
                     }
                 }
 
@@ -272,7 +287,23 @@ pub fn main() -> Result<()> {
                         Program::MiniGringo(program) => program
                             .natural(false)
                             .context("the given program is not regular")?,
-                        Program::MiniGringoCl(_) => todo!(),
+                        Program::MiniGringoCl(_) => todo!(
+                            "natural translation is not yet supported for mini-gringo-cl programs"
+                        ),
+                    }
+                }
+
+                Translation::NumericNatural => {
+                    let program = get_program_of_unknown_fragment(input)?;
+                    match program {
+                        Program::MiniGringo(program) => {
+                            numeric_natural(numeric_normal_form(program), dialect)
+                        }
+                        Program::MiniGringoCl(_) => {
+                            todo!(
+                                "numeric-natural translation is not yet supported for mini-gringo-cl programs"
+                            )
+                        }
                     }
                 }
 

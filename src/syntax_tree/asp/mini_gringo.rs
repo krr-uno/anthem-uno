@@ -275,6 +275,13 @@ impl Term {
             }
         }
     }
+
+    pub(crate) fn destructure_binary_operation(self) -> Option<(BinaryOperator, Term, Term)> {
+        match self {
+            Term::BinaryOperation { op, lhs, rhs } => Some((op, *lhs, *rhs)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
