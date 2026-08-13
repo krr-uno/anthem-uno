@@ -17,13 +17,17 @@ enum IndefiniteFunction {
     Interval,
 }
 
+// Gringo 5 (dialect D1) rounds the quotient towards 0
+// Gringo 6 (dialect D0) rounds the quotient towards negative infinity
 fn construct_graphf_axiom(f: IndefiniteFunction, d: Dialect) -> fol::Formula {
     match (f, d) {
         (IndefiniteFunction::Division, Dialect::GringoFive) => {
-            "forall I$ J$ Z$ ( divisionGraph(I$,J$,Z$) <->
-                exists K$ (
-                    K$ * |J$| <= |I$| < (K$+1) * |J$| and
-                    ((I$ * J$ >= 0 and Z$ = K$) or (I$ * J$ < 0 and Z$ = -K$))))".parse().unwrap()
+            "forall N1$ N2$ N3$ ( divisionGraph(N1$,N2$,N3$) <-> (
+                (N1$ >= 0 and 0 <= N1$ - N2$ * N3$ < N2$) or
+                (N1$ >= 0 and 0 >= N2$ * N3$ - N1$ > N2$) or
+                (N1$ < 0 and 0 <= N2$ * N3$ - N1$ < N2$) or
+                (N1$ < 0 and 0 >= N1$ - N2$ * N3$ > N2$)
+            ))".parse().unwrap()
         },
         (IndefiniteFunction::Modulo, Dialect::GringoFive) => {
             "forall I$ J$ Z$ ( moduloGraph(I$,J$,Z$) <->
@@ -32,7 +36,7 @@ fn construct_graphf_axiom(f: IndefiniteFunction, d: Dialect) -> fol::Formula {
                     ((I$ * J$ >= 0 and Z$ = I$ - K$ * J$) or (I$ * J$ < 0 and Z$ = I$ + K$ * J$))))".parse().unwrap()
         },
         (IndefiniteFunction::Division, Dialect::GringoSix) => {
-            "forall I$ J$ Q$ ( divisionGraph(I$,J$,Q$) <-> exists R$ (I$ = J$ * Q$ + R$ and J$ != 0 and 0 <= R$ < J$) )".parse().unwrap()
+            "forall N1$ N2$ N3$ ( divisionGraph(N1$,N2$,N3$) <-> ( (0 <= N1$ - N2$ * N3$ < N2$) or (0 >= N1$ - N2$ * N3$ > N2$) ))".parse().unwrap()
         },
         (IndefiniteFunction::Modulo, Dialect::GringoSix) => {
             "forall I$ J$ R$ ( moduloGraph(I$,J$,R$) <-> exists Q$ (I$ = J$ * Q$ + R$ and J$ != 0 and 0 <= R$ < J$) )".parse().unwrap()
@@ -399,4 +403,58 @@ pub(crate) fn numeric_natural(p: asp::Program, d: Dialect) -> Theory {
     }
 
     Theory { formulas }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        command_line::arguments::Dialect,
+        normalizing::asp::numeric_normal::numeric_normal_form_rule,
+        syntax_tree::asp::mini_gringo::Program,
+        translating::formula_representation::numeric_natural::numeric_natural,
+    };
+
+    #[test]
+    fn test_numeric_natural_rule_gringo_five() {
+        for (src, target) in [
+            ("q(X,Y+1) :- p(X,Y).", "forall X Y$ (p(X,Y$) -> q(X,Y$+1))."),
+            (
+                "q(X/Y+1) :- p(X,Y).",
+                "forall N1$ N2$ N3$ ( divisionGraph(N1$,N2$,N3$) <-> ( (N1$ >= 0 and 0 <= N1$ - N2$ * N3$ < N2$) or (N1$ >= 0 and 0 >= N2$ * N3$ - N1$ > N2$) or (N1$ < 0 and 0 <= N2$ * N3$ - N1$ < N2$) or (N1$ < 0 and 0 >= N1$ - N2$ * N3$ > N2$))). forall V0$ X$ Y$ ( p(X$, Y$) and divisionGraph(X$,Y$,V0$) -> q(V0$+1) ).",
+            ),
+            (
+                "p(1..8).",
+                "forall I$ J$ K$ ( intervalGraph(I$,J$,K$) <-> I$ <= K$ <= J$ ). forall V0$ (intervalGraph(1,8,V0$) -> p(V0$)).",
+            ),
+            (
+                "p(a..b).",
+                "forall I$ J$ K$ ( intervalGraph(I$,J$,K$) <-> I$ <= K$ <= J$ ). forall V0$ V1$ V2$ (V0$ = a and V1$ = b and intervalGraph(V0$, V1$, V2$) -> p(V2$)).",
+            ),
+        ] {
+            let normalized_program = Program {
+                rules: vec![numeric_normal_form_rule(src.parse().unwrap())],
+            };
+            let src = numeric_natural(normalized_program, Dialect::GringoFive);
+            let target = target.parse().unwrap();
+            assert_eq!(src, target, "\n{src} \n!= \n{target}")
+        }
+    }
+
+    #[test]
+    fn test_numeric_natural_rule_gringo_six() {
+        for (src, target) in [
+            ("q(X,Y+1) :- p(X,Y).", "forall X Y$ (p(X,Y$) -> q(X,Y$+1))."),
+            (
+                "q(X/Y+1) :- p(X,Y).",
+                "forall N1$ N2$ N3$ ( divisionGraph(N1$,N2$,N3$) <-> ( (0 <= N1$ - N2$ * N3$ < N2$) or (0 >= N1$ - N2$ * N3$ > N2$) )). forall V0$ X$ Y$ ( p(X$, Y$) and divisionGraph(X$,Y$,V0$) -> q(V0$+1) ).",
+            ),
+        ] {
+            let normalized_program = Program {
+                rules: vec![numeric_normal_form_rule(src.parse().unwrap())],
+            };
+            let src = numeric_natural(normalized_program, Dialect::GringoSix);
+            let target = target.parse().unwrap();
+            assert_eq!(src, target, "\n{src} \n!= \n{target}")
+        }
+    }
 }

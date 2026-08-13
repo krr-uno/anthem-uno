@@ -18,8 +18,7 @@ use {
         },
         formatting::fol::sigma_0::latex,
         normalizing::asp::{
-            numeric_normal::numeric_normal_form,
-            standard_program::standardize_program,
+            numeric_normal::numeric_normal_form, standard_program::standardize_program,
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{Node as _, asp, fol::sigma_0 as fol},
