@@ -4,7 +4,7 @@ use crate::{
     convenience::variable_selection::VariableSelection,
     syntax_tree::asp::mini_gringo::{
         Atom, AtomicFormula, BasicSymbol, Body, Comparison, Head, Literal, Program, Relation, Rule,
-        Term, Variable,
+        Sign, Term, Variable,
     },
 };
 
@@ -268,6 +268,28 @@ fn term_replacement_rule(rule: Rule) -> Rule {
     }
 }
 
+// {H} :- Body
+//   ==>
+// H :- Body, not not H
+fn normalize_choice_rule(rule: Rule) -> Rule {
+    let head = rule.head.clone();
+    match head {
+        Head::Basic(_) | Head::Falsity => rule,
+        Head::Choice(atom) => {
+            let new_head = Head::Basic(atom.clone());
+            let mut formulas = rule.body.formulas;
+            formulas.push(AtomicFormula::Literal(Literal {
+                sign: Sign::DoubleNegation,
+                atom,
+            }));
+            Rule {
+                head: new_head,
+                body: Body { formulas },
+            }
+        }
+    }
+}
+
 // innermost term replacement can occur in any order
 // so, remove abnormalities in the head, then the body constructs (DFS)
 // apply procedure until rule stops changing
@@ -280,7 +302,7 @@ pub(crate) fn numeric_normal_form_rule(rule: Rule) -> Rule {
         current = term_replacement_rule(previous.clone());
     }
 
-    current
+    normalize_choice_rule(current)
 }
 
 pub fn numeric_normal_form(program: Program) -> Program {
@@ -381,6 +403,8 @@ mod tests {
     fn test_numeric_normal_form_rule() {
         for (src, target) in [
             ("p(1..8).", "p(V0) :- V0 = 1..8."),
+            ("{p(1..8)}.", "p(V0) :- V0 = 1..8, not not p(V0)."),
+            ("{r} :- t.", "r :- t, not not r."),
             ("p(X/Y+1) :- q(X,Y).", "p(V0+1) :- q(X,Y), V0 = X/Y."),
             (
                 "q(1..(X/2)) :- p(X).",
@@ -388,7 +412,7 @@ mod tests {
             ),
             (
                 "{q(1..8)} :- 4 = 1/X, p((1+a)..5).",
-                "{q(V0)} :- 4 = 1/X, p(V2), V0 = 1..8, V1 = a, V2 = 1+V1..5.",
+                "q(V0) :- 4 = 1/X, p(V2), V0 = 1..8, V1 = a, V2 = 1+V1..5, not not q(V0).",
             ),
             (
                 ":- 1/Y = 4, p(Y), q(Y/5).",
