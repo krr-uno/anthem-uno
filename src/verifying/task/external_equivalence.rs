@@ -12,7 +12,7 @@ use {
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
             asp::{mini_gringo, mini_gringo_cl as asp},
-            fol::sigma_0 as fol,
+            fol::sigma_0::{self as fol, AxiomatizedTheory},
         },
         translating::{
             classical_reduction::completion::Completion as _,
@@ -758,37 +758,61 @@ impl Task for ExternalEquivalenceTask {
                     Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::Mu)),
                 },
                 FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(program) {
-                    Ok(program) =>
-                        Ok(numeric_natural(numeric_normal_form(program), dialect).replace_placeholders(&placeholders).completion(self.user_guide.input_predicates()).expect("numeric-natural did not create a completable theory")),
+                    Ok(program) => {
+                        let nnf = numeric_natural(numeric_normal_form(program), dialect);
+                        Ok(AxiomatizedTheory {
+                            axioms: nnf.axioms,
+                            theory: nnf.theory.replace_placeholders(&placeholders).completion(self.user_guide.input_predicates()).expect("numeric-natural did not create a completable theory"),
+                        })
+                    },
                     Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural)),
                 },
-                FormulaRepresentation::TauStar => Ok(program
+                FormulaRepresentation::TauStar => Ok(fol::AxiomatizedTheory{
+                    axioms: fol::Theory { formulas: Vec::new() },
+                    theory: program
                     .tau_star(dialect)
                     .replace_placeholders(&placeholders)
                     .completion(self.user_guide.input_predicates())
-                    .expect("tau_star did not create a completable theory")),
+                    .expect("tau_star did not create a completable theory")
+            }),
             };
 
             match translation {
-                Ok(mut theory) => {
+                Ok(mut ax_theory) => {
                     if self.simplify {
                         let mut portfolio =
                             [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
-                        theory = theory
+                        ax_theory.theory = ax_theory
+                            .theory
                             .into_iter()
                             .map(|f| f.apply_fixpoint(&mut portfolio))
                             .collect();
                     }
 
-                    Ok(theory)
+                    Ok(ax_theory)
                 }
                 Err(e) => Err(e),
             }
         };
 
-        let control_translate = |theory: fol::Theory| {
+        let control_translate = |ax_theory: fol::AxiomatizedTheory| {
+            let mut axiom_counter = 0..;
             let mut constraint_counter = 0..;
-            let formulas = theory
+
+            let mut formulas: Vec<fol::AnnotatedFormula> = ax_theory
+                .axioms
+                .formulas
+                .into_iter()
+                .map(|formula| fol::AnnotatedFormula {
+                    role: fol::Role::Assumption,
+                    direction: fol::Direction::Universal,
+                    name: format!("general_axiom_{}", axiom_counter.next().unwrap()),
+                    formula,
+                })
+                .collect();
+
+            let mut theory_formulas: Vec<fol::AnnotatedFormula> = ax_theory
+                .theory
                 .formulas
                 .into_iter()
                 .map(|formula| match head_predicate(&formula) {
@@ -812,6 +836,9 @@ impl Task for ExternalEquivalenceTask {
                     },
                 })
                 .collect();
+
+            formulas.append(&mut theory_formulas);
+
             fol::Specification { formulas }
         };
 

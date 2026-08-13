@@ -1072,6 +1072,12 @@ impl FromIterator<Formula> for Theory {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct AxiomatizedTheory {
+    pub axioms: Theory,
+    pub theory: Theory,
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Role {
     Assumption,

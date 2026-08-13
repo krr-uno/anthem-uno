@@ -7,6 +7,15 @@ use crate::{
     verifying::problem,
 };
 
+// Arithmetic predicates which should be excluded from gamma's here or there modification
+pub const EXCLUSIONS: [&str; 5] = [
+    "intervalGraph",
+    "divisionGraphG5",
+    "moduloGraphG5",
+    "divisionGraphG6",
+    "moduloGraphG6",
+];
+
 pub trait Gamma {
     fn gamma(self) -> Self;
 }
@@ -143,7 +152,9 @@ impl There for Formula {
 fn prepend_predicate(formula: Formula, prefix: &'static str) -> Formula {
     formula.apply(&mut |formula| match formula {
         Formula::AtomicFormula(AtomicFormula::Atom(mut a)) => {
-            a.predicate_symbol.insert_str(0, prefix);
+            if !EXCLUSIONS.contains(&a.predicate_symbol.as_str()) {
+                a.predicate_symbol.insert_str(0, prefix);
+            }
             Formula::AtomicFormula(AtomicFormula::Atom(a))
         }
         x => x,
@@ -160,6 +171,8 @@ mod tests {
             ("#true", "#true"),
             ("a", "ha"),
             ("a(a)", "ha(a)"),
+            ("intervalGraph(X,Y,Z)", "intervalGraph(X,Y,Z)"),
+            ("not intervalGraph(X,Y,Z)", "not intervalGraph(X,Y,Z)"),
             ("X > 1", "X > 1"),
             ("not a", "not ta"),
             ("not X > 1", "not X > 1"),

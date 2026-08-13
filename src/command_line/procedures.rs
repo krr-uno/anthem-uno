@@ -21,7 +21,10 @@ use {
             numeric_normal::numeric_normal_form, standard_program::standardize_program,
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{Node as _, asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            Node as _, asp,
+            fol::sigma_0::{self as fol, Theory},
+        },
         translating::{
             classical_reduction::{completion::Completion as _, gamma::Gamma as _},
             formula_representation::{
@@ -296,7 +299,11 @@ pub fn main() -> Result<()> {
                     let program = get_program_of_unknown_fragment(input)?;
                     match program {
                         Program::MiniGringo(program) => {
-                            numeric_natural(numeric_normal_form(program), dialect)
+                            let mut axiomatized_theory =
+                                numeric_natural(numeric_normal_form(program), dialect);
+                            let mut formulas = axiomatized_theory.theory.formulas;
+                            formulas.append(&mut axiomatized_theory.axioms.formulas);
+                            Theory { formulas }
                         }
                         Program::MiniGringoCl(_) => {
                             todo!(

@@ -11,7 +11,7 @@ use {
         syntax_tree::{
             GenericPredicate,
             asp::{mini_gringo, mini_gringo_cl as asp},
-            fol::sigma_0 as fol,
+            fol::sigma_0::{self as fol, AxiomatizedTheory, Theory},
         },
         translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
@@ -188,11 +188,22 @@ impl Task for StrongEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         let mut warnings = self.ensure_absence_of_predicate_declarations()?.warnings;
 
-        let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
+        // These are axioms to which gamma should not be applied
+        let mut general_axioms = Theory {
+            formulas: Vec::new(),
+        };
 
-        let mut left = match self.representation {
+        // These are the "forall X (hp(X) -> tp(X))" axioms.
+        let transition_axioms = self.transition_axioms();
+
+        let mut axiomatized_left = match self.representation {
             FormulaRepresentation::Mu => todo!(),
-            FormulaRepresentation::TauStar => self.left.tau_star(self.spec_dialect),
+            FormulaRepresentation::TauStar => AxiomatizedTheory {
+                axioms: Theory {
+                    formulas: Vec::new(),
+                },
+                theory: self.left.tau_star(self.spec_dialect),
+            },
             FormulaRepresentation::NumericNatural => {
                 match mini_gringo::Program::try_from(self.left) {
                     Ok(program) => numeric_natural(numeric_normal_form(program), self.spec_dialect),
@@ -200,10 +211,18 @@ impl Task for StrongEquivalenceTask {
                 }
             }
         };
+        general_axioms
+            .formulas
+            .append(&mut axiomatized_left.axioms.formulas);
 
-        let mut right = match self.representation {
+        let mut axiomatized_right = match self.representation {
             FormulaRepresentation::Mu => todo!(),
-            FormulaRepresentation::TauStar => self.right.tau_star(self.program_dialect),
+            FormulaRepresentation::TauStar => AxiomatizedTheory {
+                axioms: Theory {
+                    formulas: Vec::new(),
+                },
+                theory: self.right.tau_star(self.program_dialect),
+            },
             FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(
                 self.right,
             ) {
@@ -216,6 +235,12 @@ impl Task for StrongEquivalenceTask {
                 ),
             },
         };
+        general_axioms
+            .formulas
+            .append(&mut axiomatized_right.axioms.formulas);
+
+        let mut left = axiomatized_left.theory;
+        let mut right = axiomatized_right.theory;
 
         let placeholders = match &self.user_guide {
             Some(ug) => ug
@@ -308,6 +333,7 @@ impl Task for StrongEquivalenceTask {
             right,
             user_guide_assumptions,
             transition_axioms,
+            general_axioms,
             proof_outline,
             decomposition: self.decomposition,
             direction: self.direction,
@@ -322,6 +348,7 @@ struct ValidatedStrongEquivalenceTask {
     pub right: fol::Theory,
     pub user_guide_assumptions: Vec<fol::AnnotatedFormula>,
     pub transition_axioms: fol::Theory,
+    pub general_axioms: fol::Theory,
     pub proof_outline: ProofOutline,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
@@ -358,6 +385,13 @@ impl Task for ValidatedStrongEquivalenceTask {
                                     formula,
                                 }
                             })
+                            .add_theory(self.general_axioms.clone(), |i, formula| {
+                                AnnotatedFormula {
+                                    name: format!("general_axiom_{i}"),
+                                    role: Role::Axiom,
+                                    formula,
+                                }
+                            })
                             .add_annotated_formulas(forward_axioms.clone())
                             .add_theory(self.left.clone(), |i, formula| AnnotatedFormula {
                                 name: format!("left_{i}"),
@@ -382,6 +416,11 @@ impl Task for ValidatedStrongEquivalenceTask {
                             role: Role::Axiom,
                             formula,
                         }
+                    })
+                    .add_theory(self.general_axioms.clone(), |i, formula| AnnotatedFormula {
+                        name: format!("general_axiom_{i}"),
+                        role: Role::Axiom,
+                        formula,
                     })
                     .add_annotated_formulas(forward_axioms)
                     .add_theory(self.left.clone(), |i, formula| AnnotatedFormula {
@@ -416,6 +455,13 @@ impl Task for ValidatedStrongEquivalenceTask {
                                     formula,
                                 }
                             })
+                            .add_theory(self.general_axioms.clone(), |i, formula| {
+                                AnnotatedFormula {
+                                    name: format!("general_axiom_{i}"),
+                                    role: Role::Axiom,
+                                    formula,
+                                }
+                            })
                             .add_annotated_formulas(backward_axioms.clone())
                             .add_theory(self.right.clone(), |i, formula| AnnotatedFormula {
                                 name: format!("right_{i}"),
@@ -434,6 +480,11 @@ impl Task for ValidatedStrongEquivalenceTask {
                 &mut Problem::with_name("backward")
                     .add_theory(self.transition_axioms, |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
+                        role: Role::Axiom,
+                        formula,
+                    })
+                    .add_theory(self.general_axioms, |i, formula| AnnotatedFormula {
+                        name: format!("general_axiom_{i}"),
                         role: Role::Axiom,
                         formula,
                     })
