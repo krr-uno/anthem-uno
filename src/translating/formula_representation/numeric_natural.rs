@@ -418,7 +418,7 @@ mod tests {
             ("q(X,Y+1) :- p(X,Y).", "forall X Y$ (p(X,Y$) -> q(X,Y$+1))."),
             (
                 "q(X/Y+1) :- p(X,Y).",
-                "forall V0$ X$ Y$ ( p(X$, Y$) and divisionGraph(X$,Y$,V0$) -> q(V0$+1) ).",
+                "forall V0$ X$ Y$ ( p(X$, Y$) and divisionGraphG5(X$,Y$,V0$) -> q(V0$+1) ).",
             ),
             ("p(1..8).", "forall V0$ (intervalGraph(1,8,V0$) -> p(V0$))."),
             (
