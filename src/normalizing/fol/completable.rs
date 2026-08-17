@@ -272,6 +272,20 @@ pub(crate) fn make_completable(theory: Theory, var_names: &[String]) -> Option<T
     Some(Theory { formulas })
 }
 
+pub trait MakeCompletable {
+    type Output;
+
+    fn make_completable(self, var_names: &[String]) -> Option<Self::Output>;
+}
+
+impl MakeCompletable for Theory {
+    type Output = Theory;
+
+    fn make_completable(self, var_names: &[String]) -> Option<Self::Output> {
+        make_completable(self, var_names)
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

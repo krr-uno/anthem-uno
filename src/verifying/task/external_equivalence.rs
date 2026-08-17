@@ -8,7 +8,10 @@ use {
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
         },
-        normalizing::asp::numeric_normal::numeric_normal_form,
+        normalizing::{
+            asp::numeric_normal::numeric_normal_form,
+            fol::completable::MakeCompletable,
+        },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
             asp::{mini_gringo, mini_gringo_cl as asp},
@@ -16,7 +19,10 @@ use {
         },
         translating::{
             classical_reduction::completion::Completion as _,
-            formula_representation::{numeric_natural::numeric_natural, tau_star::TauStar as _},
+            formula_representation::{
+                numeric_natural::numeric_natural,
+                tau_star::{self, TauStar as _},
+            },
         },
         verifying::{
             outline::{
@@ -759,10 +765,16 @@ impl Task for ExternalEquivalenceTask {
                 },
                 FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(program) {
                     Ok(program) => {
+                        let var_names = tau_star::choose_fresh_global_variables(&program);
                         let nnf = numeric_natural(numeric_normal_form(program), dialect);
                         Ok(AxiomatizedTheory {
                             axioms: nnf.axioms,
-                            theory: nnf.theory.replace_placeholders(&placeholders).completion(self.user_guide.input_predicates()).expect("numeric-natural did not create a completable theory"),
+                            theory: nnf.theory
+                            .replace_placeholders(&placeholders)
+                            .make_completable(&var_names)
+                            .expect("numeric-natural did not create a completable theory")
+                            .completion(self.user_guide.input_predicates())
+                            .expect("make-completable did not create a completable theory"),
                         })
                     },
                     Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural)),
