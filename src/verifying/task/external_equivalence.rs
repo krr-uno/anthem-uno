@@ -767,13 +767,25 @@ impl Task for ExternalEquivalenceTask {
                     Ok(program) => {
                         let var_names = tau_star::choose_fresh_global_variables(&program);
                         let nnf = numeric_natural(numeric_normal_form(program), dialect);
+
+                        // Predicates for which a completion formula should not be generated
+                        let mut no_completion_predicates = self.user_guide.input_predicates();
+                        let mut arithmetic_predicates: IndexSet<fol::Predicate> = IndexSet::from_iter(vec![
+                            fol::Predicate { symbol: "intervalGraph".into(), arity: 3 },
+                            fol::Predicate { symbol: "divisionGraphG5".into(), arity: 3 },
+                            fol::Predicate { symbol: "divisionGraphG6".into(), arity: 3 },
+                            fol::Predicate { symbol: "moduloGraphG5".into(), arity: 3 },
+                            fol::Predicate { symbol: "moduloGraphG6".into(), arity: 3 },
+                        ]);
+                        no_completion_predicates.append(&mut arithmetic_predicates);
+
                         Ok(AxiomatizedTheory {
                             axioms: nnf.axioms,
                             theory: nnf.theory
                             .replace_placeholders(&placeholders)
                             .make_completable(&var_names)
                             .expect("numeric-natural did not create a completable theory")
-                            .completion(self.user_guide.input_predicates())
+                            .completion(no_completion_predicates)
                             .expect("make-completable did not create a completable theory"),
                         })
                     },
