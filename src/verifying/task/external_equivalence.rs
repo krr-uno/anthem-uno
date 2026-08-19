@@ -24,6 +24,7 @@ use {
             },
         },
         verifying::{
+            anf_deduplicate,
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
@@ -1027,11 +1028,11 @@ impl Task for ValidatedExternalEquivalenceTask {
         }
 
         Ok(AssembledExternalEquivalenceTask {
-            stable_premises,
-            forward_premises,
-            forward_conclusions,
-            backward_premises,
-            backward_conclusions,
+            stable_premises: anf_deduplicate(stable_premises),
+            forward_premises: anf_deduplicate(forward_premises),
+            forward_conclusions: anf_deduplicate(forward_conclusions),
+            backward_premises: anf_deduplicate(backward_premises),
+            backward_conclusions: anf_deduplicate(backward_conclusions),
             proof_outline: self.proof_outline,
             decomposition: self.decomposition,
             direction: self.direction,

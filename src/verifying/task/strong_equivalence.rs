@@ -189,14 +189,12 @@ impl Task for StrongEquivalenceTask {
         let mut warnings = self.ensure_absence_of_predicate_declarations()?.warnings;
 
         // These are axioms to which gamma should not be applied
-        let mut general_axioms = Theory {
-            formulas: Vec::new(),
-        };
+        let mut general_axioms = IndexSet::new();
 
         // These are the "forall X (hp(X) -> tp(X))" axioms.
         let transition_axioms = self.transition_axioms();
 
-        let mut axiomatized_left = match self.representation {
+        let axiomatized_left = match self.representation {
             FormulaRepresentation::Mu => todo!(),
             FormulaRepresentation::TauStar => AxiomatizedTheory {
                 axioms: Theory {
@@ -211,11 +209,11 @@ impl Task for StrongEquivalenceTask {
                 }
             }
         };
-        general_axioms
-            .formulas
-            .append(&mut axiomatized_left.axioms.formulas);
+        for f in axiomatized_left.axioms.formulas {
+            general_axioms.insert(f);
+        }
 
-        let mut axiomatized_right = match self.representation {
+        let axiomatized_right = match self.representation {
             FormulaRepresentation::Mu => todo!(),
             FormulaRepresentation::TauStar => AxiomatizedTheory {
                 axioms: Theory {
@@ -235,9 +233,9 @@ impl Task for StrongEquivalenceTask {
                 ),
             },
         };
-        general_axioms
-            .formulas
-            .append(&mut axiomatized_right.axioms.formulas);
+        for f in axiomatized_right.axioms.formulas {
+            general_axioms.insert(f);
+        }
 
         let mut left = axiomatized_left.theory;
         let mut right = axiomatized_right.theory;
@@ -333,7 +331,9 @@ impl Task for StrongEquivalenceTask {
             right,
             user_guide_assumptions,
             transition_axioms,
-            general_axioms,
+            general_axioms: Theory {
+                formulas: Vec::from_iter(general_axioms),
+            },
             proof_outline,
             decomposition: self.decomposition,
             direction: self.direction,
