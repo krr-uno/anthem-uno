@@ -9,8 +9,7 @@ use {
             with_warnings::{Result, WithWarnings},
         },
         normalizing::{
-            asp::numeric_normal::numeric_normal_form,
-            fol::completable::MakeCompletable,
+            asp::numeric_normal::numeric_normal_form, fol::completable::MakeCompletable,
         },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
