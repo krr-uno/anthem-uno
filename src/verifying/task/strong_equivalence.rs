@@ -10,7 +10,7 @@ use {
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
             GenericPredicate,
-            asp::{mini_gringo, mini_gringo_cl as asp},
+            asp::{Definite, mini_gringo, mini_gringo_cl as asp},
             fol::sigma_0::{self as fol, AxiomatizedTheory, Theory},
         },
         translating::{
@@ -194,6 +194,9 @@ impl Task for StrongEquivalenceTask {
         // These are the "forall X (hp(X) -> tp(X))" axioms.
         let transition_axioms = self.transition_axioms();
 
+        // Check if both programs are definite
+        let definite = { self.left.definite() && self.right.definite() };
+
         let axiomatized_left = match self.representation {
             FormulaRepresentation::Mu => todo!(),
             FormulaRepresentation::TauStar => AxiomatizedTheory {
@@ -264,8 +267,11 @@ impl Task for StrongEquivalenceTask {
                 .collect();
         }
 
-        left = left.gamma();
-        right = right.gamma();
+        // gamma can be bypassed if programs are definite
+        if !definite {
+            left = left.gamma();
+            right = right.gamma();
+        }
 
         if self.simplify {
             let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
@@ -335,6 +341,7 @@ impl Task for StrongEquivalenceTask {
                 formulas: Vec::from_iter(general_axioms),
             },
             proof_outline,
+            definite,
             decomposition: self.decomposition,
             direction: self.direction,
         }
@@ -350,6 +357,7 @@ struct ValidatedStrongEquivalenceTask {
     pub transition_axioms: fol::Theory,
     pub general_axioms: fol::Theory,
     pub proof_outline: ProofOutline,
+    pub definite: bool,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
 }
@@ -365,7 +373,13 @@ impl Task for ValidatedStrongEquivalenceTask {
             .map(|a| a.into_problem_formula(problem::Role::Axiom))
             .collect();
 
-        let proof_outline = self.proof_outline.apply_gamma_reduction();
+        let (transition_axioms, proof_outline) = match self.definite {
+            true => (Theory { formulas: vec![] }, self.proof_outline),
+            false => (
+                self.transition_axioms,
+                self.proof_outline.apply_gamma_reduction(),
+            ),
+        };
 
         let mut problems = Vec::new();
         if matches!(
@@ -378,12 +392,10 @@ impl Task for ValidatedStrongEquivalenceTask {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
                         Problem::with_name(format!("forward_outline_{i}_{j}"))
-                            .add_theory(self.transition_axioms.clone(), |i, formula| {
-                                AnnotatedFormula {
-                                    name: format!("transition_axiom_{i}"),
-                                    role: Role::Axiom,
-                                    formula,
-                                }
+                            .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                                name: format!("transition_axiom_{i}"),
+                                role: Role::Axiom,
+                                formula,
                             })
                             .add_theory(self.general_axioms.clone(), |i, formula| {
                                 AnnotatedFormula {
@@ -410,12 +422,10 @@ impl Task for ValidatedStrongEquivalenceTask {
             // Add the Forward problems to problem list
             problems.append(
                 &mut Problem::with_name("forward")
-                    .add_theory(self.transition_axioms.clone(), |i, formula| {
-                        AnnotatedFormula {
-                            name: format!("transition_axiom_{i}"),
-                            role: Role::Axiom,
-                            formula,
-                        }
+                    .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                        name: format!("transition_axiom_{i}"),
+                        role: Role::Axiom,
+                        formula,
                     })
                     .add_theory(self.general_axioms.clone(), |i, formula| AnnotatedFormula {
                         name: format!("general_axiom_{i}"),
@@ -448,12 +458,10 @@ impl Task for ValidatedStrongEquivalenceTask {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
                         Problem::with_name(format!("backward_outline_{i}_{j}"))
-                            .add_theory(self.transition_axioms.clone(), |i, formula| {
-                                AnnotatedFormula {
-                                    name: format!("transition_axiom_{i}"),
-                                    role: Role::Axiom,
-                                    formula,
-                                }
+                            .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                                name: format!("transition_axiom_{i}"),
+                                role: Role::Axiom,
+                                formula,
                             })
                             .add_theory(self.general_axioms.clone(), |i, formula| {
                                 AnnotatedFormula {
@@ -478,7 +486,7 @@ impl Task for ValidatedStrongEquivalenceTask {
 
             problems.append(
                 &mut Problem::with_name("backward")
-                    .add_theory(self.transition_axioms, |i, formula| AnnotatedFormula {
+                    .add_theory(transition_axioms, |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
                         role: Role::Axiom,
                         formula,
