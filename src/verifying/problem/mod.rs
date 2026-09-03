@@ -545,7 +545,8 @@ impl fmt::Display for Problem {
         // forall X Y ( X = Y <-> f(X) = f(Y) )
         // etc.
         for (i, axiom) in self.function_ordering_axioms(max_symbol).iter().enumerate() {
-            writeln!(f, "tff(function_order_{i}, axiom, {axiom}).")?
+            let formatted_axiom = crate::formatting::fol::sigma_0::tptp::Format(axiom);
+            writeln!(f, "tff(function_order_{i}, axiom, {formatted_axiom}).")?
         }
 
         for formula in &self.formulas {
