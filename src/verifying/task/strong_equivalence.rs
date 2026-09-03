@@ -273,8 +273,14 @@ impl Task for StrongEquivalenceTask {
             right = right.gamma();
         }
 
+        for f in right.formulas.iter() {
+            println!("right: {f}"); //, crate::formatting::fol::sigma_0::tptp::Format(f));
+        }
+
+        println!("==========");
+
         if self.simplify {
-            let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
+            let mut portfolio = [INTUITIONISTIC,HT,CLASSIC].concat().into_iter().compose();
             left = left
                 .into_iter()
                 .map(|f| f.apply_fixpoint(&mut portfolio))
@@ -284,6 +290,12 @@ impl Task for StrongEquivalenceTask {
                 .map(|f| f.apply_fixpoint(&mut portfolio))
                 .collect();
         }
+
+        for f in right.formulas.iter() {
+            println!("right: {f}"); //, crate::formatting::fol::sigma_0::tptp::Format(f));
+        }
+
+        println!("==========");
 
         if self.break_equivalences {
             left = crate::breaking::fol::sigma_0::ht::break_equivalences_theory(left);
