@@ -187,6 +187,15 @@ pub enum Fragment {
     MiniGringoCL,
 }
 
+impl std::fmt::Display for Fragment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Fragment::MiniGringo => write!(f, "mini-gringo"),
+            Fragment::MiniGringoCL => write!(f, "mini-gringo-cl"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Dialect {
     #[default]
@@ -266,6 +275,7 @@ pub enum Translation {
     Gamma,
     Mu,
     Natural,
+    NumericNatural,
     TauStar,
 }
 
@@ -274,6 +284,17 @@ pub enum FormulaRepresentation {
     Mu,
     #[default]
     TauStar,
+    NumericNatural,
+}
+
+impl std::fmt::Display for FormulaRepresentation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FormulaRepresentation::Mu => write!(f, "mu"),
+            FormulaRepresentation::TauStar => write!(f, "tau-star"),
+            FormulaRepresentation::NumericNatural => write!(f, "numeric-natural"),
+        }
+    }
 }
 
 // TODO: In the future, there may be more options for reducing

@@ -359,7 +359,7 @@ mod tests {
     use {
         super::Format,
         crate::syntax_tree::fol::sigma_0::{
-            Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula,
+            Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula, Function,
             GeneralTerm, Guard, IntegerTerm, Quantification, Quantifier, Relation, Sort,
             SymbolicTerm, UnaryOperator, Variable,
         },
@@ -745,6 +745,28 @@ mod tests {
             })
             .to_string(),
             "![X_i_s: symbol, X_i: $int, Y1_g: general]: ((p(f__integer__(X_i)) & q(Y1_g)) & t(f__symbolic__(X_i_s)))"
+        );
+        assert_eq!(
+            Format(&Formula::QuantifiedFormula {
+                quantification: Quantification {
+                    quantifier: Quantifier::Forall,
+                    variables: vec![Variable {
+                        name: "X".to_string(),
+                        sort: Sort::General
+                    }]
+                },
+                formula: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
+                    predicate_symbol: "p".to_string(),
+                    terms: vec![GeneralTerm::Function(Function {
+                        function_symbol: "f".to_string(),
+                        sort: Sort::Symbol,
+                        terms: vec![GeneralTerm::Variable("X".to_string())]
+                    })]
+                }))
+                .into()
+            })
+            .to_string(),
+            "![X_g: general]: (p(f__symbolic__(f(X_g))))"
         );
     }
 }

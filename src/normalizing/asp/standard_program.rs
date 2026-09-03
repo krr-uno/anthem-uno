@@ -152,7 +152,7 @@ fn standardize_rule_body(
     mini_gringo_cl::Body { formulas }
 }
 
-pub fn standardize_rule(rule: gringo::Rule) -> mini_gringo_cl::Rule {
+pub(crate) fn standardize_rule(rule: gringo::Rule) -> mini_gringo_cl::Rule {
     let mut taken_variables = rule
         .named_variables()
         .into_iter()
@@ -163,6 +163,12 @@ pub fn standardize_rule(rule: gringo::Rule) -> mini_gringo_cl::Rule {
     let body = standardize_rule_body(rule.body, &mut taken_variables);
 
     mini_gringo_cl::Rule { head, body }
+}
+
+pub fn standardize_program(program: gringo::Program) -> mini_gringo_cl::Program {
+    mini_gringo_cl::Program {
+        rules: program.rules.into_iter().map(standardize_rule).collect(),
+    }
 }
 
 #[cfg(test)]

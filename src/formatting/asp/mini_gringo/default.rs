@@ -61,6 +61,7 @@ impl Precedence for Format<'_, Term> {
                 ..
             }
             | Term::BasicSymbol(_)
+            | Term::HerbrandFunction { .. }
             | Term::Variable(_) => 0,
             Term::BinaryOperation {
                 op: BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo,
@@ -88,7 +89,9 @@ impl Precedence for Format<'_, Term> {
                 BinaryOperator::Interval => write!(f, "{}", Format(op)),
                 _ => write!(f, " {} ", Format(op)),
             },
-            Term::BasicSymbol(_) | Term::Variable(_) => unreachable!(),
+            Term::BasicSymbol(_) | Term::HerbrandFunction { .. } | Term::Variable(_) => {
+                unreachable!()
+            }
         }
     }
 }
@@ -101,6 +104,18 @@ impl Display for Format<'_, Term> {
             Term::UnaryOperation { arg, .. } => self.fmt_unary(Format(arg.as_ref()), f),
             Term::BinaryOperation { lhs, rhs, .. } => {
                 self.fmt_binary(Format(lhs.as_ref()), Format(rhs.as_ref()), f)
+            }
+            Term::HerbrandFunction { symbol, terms } => {
+                write!(f, "{symbol}")?;
+
+                let mut iter = terms.iter().map(Format);
+                write!(f, "({}", iter.next().unwrap())?;
+                for term in iter {
+                    write!(f, ", {term}")?;
+                }
+                write!(f, ")")?;
+
+                Ok(())
             }
         }
     }
