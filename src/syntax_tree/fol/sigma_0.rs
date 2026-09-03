@@ -278,12 +278,10 @@ impl GeneralTerm {
             GeneralTerm::SymbolicTerm(t) if var.sort == Sort::Symbol => match term {
                 GeneralTerm::SymbolicTerm(term) => {
                     GeneralTerm::SymbolicTerm(t.substitute(var, term))
-                },
-                GeneralTerm::Function(f) if f.sort == Sort::Symbol => {
-                    match t {
-                        SymbolicTerm::Variable(s) if var.name == s => GeneralTerm::Function(f),
-                        _ => GeneralTerm::SymbolicTerm(t),
-                    }
+                }
+                GeneralTerm::Function(f) if f.sort == Sort::Symbol => match t {
+                    SymbolicTerm::Variable(s) if var.name == s => GeneralTerm::Function(f),
+                    _ => GeneralTerm::SymbolicTerm(t),
                 },
                 _ => panic!(
                     "cannot substitute general term `{term}` for the symbolic variable `{var}`"
@@ -1457,7 +1455,12 @@ mod tests {
                 "Y = 5 and exists Y2 ( p(Y, Y2, Y1) )",
             ),
             ("forall X p(X,Y)", "Y", "f$s(1,2)", "forall X p(X,f$s(1,2))"),
-            ("forall X p(X,Y)", "Y", "f$s(1,X)", "forall X1 p(X1,f$s(1,X))"),
+            (
+                "forall X p(X,Y)",
+                "Y",
+                "f$s(1,X)",
+                "forall X1 p(X1,f$s(1,X))",
+            ),
             (
                 "p(X) and exists Y q(X,Y)",
                 "X",

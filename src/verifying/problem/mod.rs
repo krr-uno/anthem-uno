@@ -406,11 +406,8 @@ impl Problem {
     pub fn functions(&self) -> IndexSet<Function> {
         let mut result = IndexSet::new();
         for formula in &self.formulas {
-            //println!("\tFormula: {formula}");
-            //println!("\tfunctions: {:?}", formula.functions());
             result.extend(formula.functions().into_iter().map(|f| f.into()))
         }
-        //println!("hello there {:?}", result);
         result
     }
 
@@ -510,9 +507,6 @@ impl fmt::Display for Problem {
             };
             writeln!(f, "tff(type_function_constant_{i}, type, {name}: {sort}).")?
         }
-
-        let temp = self.functions().len();
-        writeln!(f, "arity: {temp}")?;
 
         // Type declarations for functions
         for (i, function) in self.functions().into_iter().enumerate() {

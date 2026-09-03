@@ -1,6 +1,8 @@
 use crate::{
-    convenience::unbox::{Unbox as _, fol::sigma_0::UnboxedFormula}, syntax_tree::fol::sigma_0::{
-        AtomicFormula, BinaryConnective, Formula, Function, GeneralTerm, IntegerTerm, Quantification, Quantifier, Relation, Sort, SymbolicTerm, UnaryConnective, Variable,
+    convenience::unbox::{Unbox as _, fol::sigma_0::UnboxedFormula},
+    syntax_tree::fol::sigma_0::{
+        AtomicFormula, BinaryConnective, Formula, Function, GeneralTerm, IntegerTerm,
+        Quantification, Quantifier, Relation, Sort, SymbolicTerm, UnaryConnective, Variable,
     },
 };
 
@@ -56,7 +58,9 @@ pub fn substitute_defined_variables(formula: Formula) -> Formula {
                     )
                     | (
                         GeneralTerm::SymbolicTerm(SymbolicTerm::Variable(name)),
-                        GeneralTerm::Function(Function { sort: Sort::Symbol, .. }),
+                        GeneralTerm::Function(Function {
+                            sort: Sort::Symbol, ..
+                        }),
                         Sort::Symbol,
                     ) if variable.name == *name && !term.variables().contains(variable) => {
                         Some(term)
