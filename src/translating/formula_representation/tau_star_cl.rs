@@ -772,10 +772,10 @@ fn tau_b_literal(l: asp::Literal, taken_vars: IndexSet<Variable>, dialect: Diale
 
     // Compute p(Z1, Z2, ..., Zk)
     let var_terms: Vec<GeneralTerm> = vars.iter().cloned().map(GeneralTerm::from).collect();
-    let p_zk = Formula::AtomicFormula(AtomicFormula::Atom(Atom {
-        predicate_symbol: atom.predicate_symbol,
-        terms: var_terms,
-    }));
+    let p_zk = Formula::AtomicFormula(AtomicFormula::Atom(Atom::new(
+        atom.predicate_symbol,
+        var_terms,
+    )));
 
     // Compute tau^b(B) minus the existential quantifier
     let inner = match l.sign {
@@ -962,13 +962,13 @@ fn gsix_cl_consequent(head: asp::ConditionalHead, dialect: Dialect) -> Formula {
                         sort: Sort::General,
                     })
                     .collect();
-                let new_atom = Formula::AtomicFormula(AtomicFormula::Atom(Atom {
-                    predicate_symbol: literal.atom.predicate_symbol,
-                    terms: consequent_vars
+                let new_atom = Formula::AtomicFormula(AtomicFormula::Atom(Atom::new(
+                    literal.atom.predicate_symbol,
+                    consequent_vars
                         .into_iter()
                         .map(GeneralTerm::Variable)
                         .collect(),
-                }));
+                )));
 
                 let inner = Formula::BinaryFormula {
                     connective: BinaryConnective::Implication,
@@ -1139,19 +1139,16 @@ pub(crate) fn tau_star_rule(r: asp::Rule, globals: &[String], dialect: Dialect) 
 
             let consequent = if predicate.arity > 0 {
                 // Atom with variables in the head
-                Formula::AtomicFormula(AtomicFormula::Atom(Atom {
-                    predicate_symbol: predicate.symbol,
-                    terms: kvars
+                Formula::AtomicFormula(AtomicFormula::Atom(Atom::new(
+                    predicate.symbol,
+                    kvars
                         .iter()
                         .map(|v| GeneralTerm::Variable(v.name.clone()))
                         .collect(),
-                }))
+                )))
             } else {
                 // Propositional atom in the head
-                Formula::AtomicFormula(AtomicFormula::Atom(Atom {
-                    predicate_symbol: predicate.symbol,
-                    terms: vec![],
-                }))
+                Formula::AtomicFormula(AtomicFormula::Atom(Atom::new(predicate.symbol, vec![])))
             };
 
             let antecedent = if r.is_choice_rule() {

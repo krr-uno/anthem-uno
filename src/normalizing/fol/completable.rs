@@ -213,12 +213,14 @@ fn make_implication_completable(
                 });
             }
 
+            let arity = new_terms.len();
             Some(Formula::BinaryFormula {
                 connective: BinaryConnective::Implication,
                 lhs: Formula::conjoin(val_t).into(),
                 rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                     predicate_symbol: atom.predicate_symbol,
                     terms: new_terms,
+                    argument_sorts: vec![Sort::General; arity],
                 }))
                 .into(),
             })

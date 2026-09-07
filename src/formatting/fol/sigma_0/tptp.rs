@@ -77,14 +77,7 @@ impl Display for Format<'_, SymbolicTerm> {
 impl Display for Format<'_, Function> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let symbol = &self.0.function_symbol;
-        let sort = &self.0.sort;
         let terms = &self.0.terms;
-
-        match sort {
-            Sort::Integer => write!(f, "f__integer__(")?,
-            Sort::Symbol => write!(f, "f__symbolic__(")?,
-            Sort::General => (),
-        }
 
         write!(f, "{symbol}")?;
 
@@ -94,10 +87,6 @@ impl Display for Format<'_, Function> {
             write!(f, ", {term}")?;
         }
         write!(f, ")")?;
-
-        if matches!(sort, Sort::Integer) || matches!(sort, Sort::Symbol) {
-            write!(f, ")")?;
-        }
 
         Ok(())
     }
@@ -121,11 +110,54 @@ impl Display for Format<'_, Atom> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let predicate = &self.0.predicate_symbol;
         let terms = &self.0.terms;
+        let sorts = &self.0.argument_sorts;
 
         write!(f, "{predicate}")?;
 
         if !terms.is_empty() {
-            let mut iter = terms.iter().map(Format);
+            let mut iter = terms.iter().zip(sorts).map(|(term, sort)| {
+                match (term, sort) {
+                    // Apply default formatter with general term typecasting
+                    (GeneralTerm::Infimum, Sort::General)
+                    | (GeneralTerm::Supremum, Sort::General)
+                    | (GeneralTerm::Variable(_), Sort::General)
+                    | (GeneralTerm::FunctionConstant(_), Sort::General)
+                    | (GeneralTerm::IntegerTerm(_), Sort::General)
+                    | (GeneralTerm::SymbolicTerm(_), Sort::General) => format!("{}", Format(term)),
+                    (GeneralTerm::Function(f), Sort::General) => match f.sort {
+                        Sort::General => format!("{}", Format(f)),
+                        Sort::Integer => format!("f__integer__({})", Format(f)),
+                        Sort::Symbol => format!("f__symbolic__({})", Format(f)),
+                    },
+
+                    // Apply integer-only formatter
+                    (GeneralTerm::IntegerTerm(i), Sort::Integer) => format!("{}", Format(i)),
+                    (GeneralTerm::SymbolicTerm(s), Sort::Symbol) => format!("{}", Format(s)),
+                    (GeneralTerm::Function(f), Sort::Integer) => match f.sort {
+                        Sort::General | Sort::Symbol => {
+                            panic!("term/sort mismatch in TPTP formatter")
+                        }
+                        Sort::Integer => format!("{}", Format(f)),
+                    },
+                    (GeneralTerm::Function(f), Sort::Symbol) => match f.sort {
+                        Sort::General | Sort::Integer => {
+                            panic!("term/sort mismatch in TPTP formatter")
+                        }
+                        Sort::Symbol => format!("{}", Format(f)),
+                    },
+
+                    // Panic - integer-only conversion must have failed due to a bug
+                    (GeneralTerm::Infimum, _)
+                    | (GeneralTerm::Supremum, _)
+                    | (GeneralTerm::FunctionConstant(_), _)
+                    | (GeneralTerm::Variable(_), _)
+                    | (GeneralTerm::IntegerTerm(_), Sort::Symbol)
+                    | (GeneralTerm::SymbolicTerm(_), Sort::Integer) => {
+                        panic!("term/sort mismatch in TPTP formatter")
+                    }
+                }
+            });
+
             write!(f, "({}", iter.next().unwrap())?;
             for term in iter {
                 write!(f, ", {term}")?;
@@ -468,11 +500,28 @@ mod tests {
                         rhs: IntegerTerm::Numeral(3).into(),
                     }),
                     GeneralTerm::IntegerTerm(IntegerTerm::Numeral(5)),
-                ]
+                ],
+                argument_sorts: vec![Sort::General, Sort::General],
             })
             .to_string(),
             "prime(f__integer__($sum(N1_i, 3)), f__integer__(5))"
-        )
+        );
+        assert_eq!(
+            Format(&Atom {
+                predicate_symbol: "prime".into(),
+                terms: vec![
+                    GeneralTerm::IntegerTerm(IntegerTerm::BinaryOperation {
+                        op: BinaryOperator::Add,
+                        lhs: IntegerTerm::Variable("N1".into()).into(),
+                        rhs: IntegerTerm::Numeral(3).into(),
+                    }),
+                    GeneralTerm::IntegerTerm(IntegerTerm::Numeral(5)),
+                ],
+                argument_sorts: vec![Sort::Integer, Sort::Integer],
+            })
+            .to_string(),
+            "prime($sum(N1_i, 3), 5)"
+        );
     }
 
     #[test]
@@ -643,7 +692,8 @@ mod tests {
         assert_eq!(
             Format(&Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                 predicate_symbol: "p".into(),
-                terms: vec![]
+                terms: vec![],
+                argument_sorts: vec![],
             })))
             .to_string(),
             "p"
@@ -655,19 +705,22 @@ mod tests {
                     connective: BinaryConnective::Implication,
                     lhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "p".into(),
-                        terms: vec![]
+                        terms: vec![],
+                        argument_sorts: vec![],
                     }))
                     .into(),
                     rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "q".into(),
-                        terms: vec![]
+                        terms: vec![],
+                        argument_sorts: vec![],
                     }))
                     .into()
                 }
                 .into(),
                 rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                     predicate_symbol: "r".into(),
-                    terms: vec![]
+                    terms: vec![],
+                    argument_sorts: vec![],
                 }))
                 .into(),
             })
@@ -694,11 +747,13 @@ mod tests {
                     lhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "p".into(),
                         terms: vec![],
+                        argument_sorts: vec![],
                     }))
                     .into(),
                     rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "q".into(),
                         terms: vec![],
+                        argument_sorts: vec![],
                     }))
                     .into(),
                 }
@@ -735,11 +790,13 @@ mod tests {
                             terms: vec![GeneralTerm::IntegerTerm(IntegerTerm::Variable(
                                 "X".to_string()
                             ))],
+                            argument_sorts: vec![Sort::General],
                         }))
                         .into(),
                         rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                             predicate_symbol: "q".into(),
                             terms: vec![GeneralTerm::Variable("Y1".to_string())],
+                            argument_sorts: vec![Sort::General],
                         }))
                         .into(),
                     }
@@ -749,6 +806,7 @@ mod tests {
                         terms: vec![GeneralTerm::SymbolicTerm(SymbolicTerm::Variable(
                             "X_i".into()
                         ))],
+                        argument_sorts: vec![Sort::General],
                     }))
                     .into(),
                 }
@@ -772,7 +830,8 @@ mod tests {
                         function_symbol: "f".to_string(),
                         sort: Sort::Symbol,
                         terms: vec![GeneralTerm::Variable("X".to_string())]
-                    })]
+                    })],
+                    argument_sorts: vec![Sort::General],
                 }))
                 .into()
             })

@@ -355,6 +355,7 @@ impl Predicate {
             terms: (1..=self.arity)
                 .map(|i| GeneralTerm::Variable(format!("X{i}")))
                 .collect(),
+            argument_sorts: vec![Sort::General; self.arity],
         }))
     }
 }
@@ -386,13 +387,25 @@ impl From<GenericPredicate> for Predicate {
     }
 }
 
+// TODO: a runtime assertion checking that terms and argument_sorts
+// have the same length for every created atom struct?
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Atom {
     pub predicate_symbol: String,
     pub terms: Vec<GeneralTerm>,
+    pub argument_sorts: Vec<Sort>,
 }
 
 impl Atom {
+    pub fn new(predicate_symbol: String, terms: Vec<GeneralTerm>) -> Self {
+        let arity = terms.len();
+        Atom {
+            predicate_symbol,
+            terms,
+            argument_sorts: vec![Sort::General; arity],
+        }
+    }
+
     pub fn predicate(&self) -> Predicate {
         Predicate {
             symbol: self.predicate_symbol.clone(),
@@ -408,6 +421,7 @@ impl Atom {
                 .into_iter()
                 .map(|t| t.rename_conflicting_symbols(possible_conflicts))
                 .collect(),
+            argument_sorts: self.argument_sorts,
         }
     }
 
@@ -419,6 +433,7 @@ impl Atom {
                 .into_iter()
                 .map(|t| t.replace_placeholders(mapping))
                 .collect(),
+            argument_sorts: self.argument_sorts,
         }
     }
 }
@@ -437,6 +452,7 @@ impl Atom {
         Atom {
             predicate_symbol,
             terms,
+            argument_sorts: self.argument_sorts,
         }
     }
 }

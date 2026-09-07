@@ -160,16 +160,16 @@ fn nu_literal(f: asp::AtomicFormula, d: Dialect, vars: &mut IndexSet<String>) ->
     match f {
         asp::AtomicFormula::Literal(l) => {
             let sign = l.sign;
-
-            let atom = Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-                predicate_symbol: l.atom.predicate_symbol,
-                terms: l
-                    .atom
-                    .terms
-                    .into_iter()
-                    .map(|t| p2f(t, false, vars))
-                    .collect(),
-            }));
+            let terms = l
+                .atom
+                .terms
+                .into_iter()
+                .map(|t| p2f(t, false, vars))
+                .collect();
+            let atom = Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom::new(
+                l.atom.predicate_symbol,
+                terms,
+            )));
 
             match sign {
                 asp::Sign::NoSign => atom,
@@ -208,10 +208,10 @@ fn nu_literal(f: asp::AtomicFormula, d: Dialect, vars: &mut IndexSet<String>) ->
                     p2f(t2, true, vars),
                     p2f(c.lhs, true, vars),
                 ];
-                Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
+                Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom::new(
                     predicate_symbol,
                     terms,
-                }))
+                )))
             } else {
                 Formula::AtomicFormula(fol::AtomicFormula::Comparison(fol::Comparison {
                     term: p2f(c.lhs, false, vars),
@@ -300,14 +300,13 @@ fn unify_variable_sorts_atomic(
     match f {
         fol::AtomicFormula::Truth => fol::AtomicFormula::Truth,
         fol::AtomicFormula::Falsity => fol::AtomicFormula::Falsity,
-        fol::AtomicFormula::Atom(atom) => fol::AtomicFormula::Atom(fol::Atom {
-            predicate_symbol: atom.predicate_symbol,
-            terms: atom
-                .terms
+        fol::AtomicFormula::Atom(atom) => fol::AtomicFormula::Atom(fol::Atom::new(
+            atom.predicate_symbol,
+            atom.terms
                 .into_iter()
                 .map(|t| unify_variable_sorts_term(t, vars))
                 .collect(),
-        }),
+        )),
         fol::AtomicFormula::Comparison(comparison) => {
             fol::AtomicFormula::Comparison(fol::Comparison {
                 term: unify_variable_sorts_term(comparison.term, vars),

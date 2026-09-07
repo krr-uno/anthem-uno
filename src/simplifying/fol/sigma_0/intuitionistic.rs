@@ -635,12 +635,14 @@ mod tests {
             formula: Box::new(Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                 predicate_symbol: "a".into(),
                 terms: vec![],
+                argument_sorts: vec![],
             }))),
         };
 
         let target = Formula::AtomicFormula(AtomicFormula::Atom(Atom {
             predicate_symbol: "a".into(),
             terms: vec![],
+            argument_sorts: vec![],
         }));
 
         assert_eq!(src.apply(&mut remove_empty_quantifications), target);

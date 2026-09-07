@@ -84,10 +84,10 @@ impl RenamePredicates for fol::AtomicFormula {
 impl RenamePredicates for fol::Atom {
     fn rename_predicates(self, mapping: &IndexMap<fol::Predicate, String>) -> Self {
         match mapping.get(&self.predicate()) {
-            Some(name_extension) => fol::Atom {
-                predicate_symbol: format!("{}_{}", self.predicate_symbol, name_extension),
-                terms: self.terms,
-            },
+            Some(name_extension) => fol::Atom::new(
+                format!("{}_{}", self.predicate_symbol, name_extension),
+                self.terms,
+            ),
             None => self,
         }
     }
