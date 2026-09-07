@@ -6,7 +6,7 @@ use {
             fol::sigma_0::{
                 Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula,
                 Function, FunctionConstant, GeneralTerm, IntegerTerm, Quantification, Quantifier,
-                Relation, Sort, SymbolicTerm, UnaryConnective, UnaryOperator, Variable,
+                Relation, Sort, SymbolicTerm, Theory, UnaryConnective, UnaryOperator, Variable,
             },
         },
     },
@@ -351,6 +351,17 @@ impl Display for Format<'_, Formula> {
                 self.fmt_binary(Format(lhs.as_ref()), Format(rhs.as_ref()), f)
             }
         }
+    }
+}
+
+impl Display for Format<'_, Theory> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let formulas = &self.0.formulas;
+        let iter = formulas.iter().map(Format);
+        for form in iter {
+            writeln!(f, "{form}.")?;
+        }
+        Ok(())
     }
 }
 

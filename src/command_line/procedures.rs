@@ -7,8 +7,8 @@ use {
         command_line::{
             Program,
             arguments::{
-                Arguments, Command, Dialect, Equivalence, Fragment, Normalization, Output, ParseAs,
-                Property, SimplificationPortfolio, SimplificationStrategy, Translation,
+                Arguments, Command, Dialect, Equivalence, Format, Fragment, Normalization, Output,
+                ParseAs, Property, SimplificationPortfolio, SimplificationStrategy, Translation,
                 Visualization,
             },
             files::Files,
@@ -16,7 +16,7 @@ use {
         convenience::{
             apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
         },
-        formatting::fol::sigma_0::latex,
+        formatting::fol::sigma_0::{latex, tptp},
         normalizing::asp::{
             numeric_normal::numeric_normal_form, standard_program::standardize_program,
         },
@@ -206,7 +206,7 @@ pub fn main() -> Result<()> {
             portfolio,
             strategy,
             input,
-            display_latex,
+            format,
         } => {
             let mut simplification = match portfolio {
                 SimplificationPortfolio::Classic => [INTUITIONISTIC, HT, CLASSIC].concat(),
@@ -227,11 +227,18 @@ pub fn main() -> Result<()> {
                 })
                 .collect();
 
-            if display_latex {
-                let theory = latex::Format(&simplified_theory);
-                print!("{theory}");
-            } else {
-                print!("{simplified_theory}");
+            match format {
+                Format::Default => {
+                    print!("{simplified_theory}");
+                }
+                Format::Tptp => {
+                    let theory = tptp::Format(&simplified_theory);
+                    print!("{theory}");
+                }
+                Format::Latex => {
+                    let theory = latex::Format(&simplified_theory);
+                    print!("{theory}");
+                }
             }
 
             Ok(())
@@ -241,7 +248,7 @@ pub fn main() -> Result<()> {
             with,
             dialect,
             input,
-            display_latex,
+            format,
         } => {
             let theory = match with {
                 Translation::Completion => {
@@ -319,11 +326,18 @@ pub fn main() -> Result<()> {
                 }
             };
 
-            if display_latex {
-                let theory = latex::Format(&theory);
-                print!("{theory}")
-            } else {
-                print!("{theory}")
+            match format {
+                Format::Default => {
+                    print!("{theory}");
+                }
+                Format::Tptp => {
+                    let theory = tptp::Format(&theory);
+                    print!("{theory}");
+                }
+                Format::Latex => {
+                    let theory = latex::Format(&theory);
+                    print!("{theory}");
+                }
             }
 
             Ok(())

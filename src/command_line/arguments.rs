@@ -60,12 +60,12 @@ pub enum Command {
         #[arg(long, value_enum)]
         strategy: SimplificationStrategy,
 
-        // Display formulas as LaTex
-        #[arg(long, action)]
-        display_latex: bool,
-
         /// The file to simplify
         input: Option<PathBuf>,
+
+        /// The format of the output
+        #[arg(long, value_enum, default_value_t)]
+        format: Format,
     },
 
     /// Translate a given answer set program or first-order theory
@@ -78,9 +78,9 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         dialect: Dialect,
 
-        // Display formulas as LaTex
-        #[arg(long, action)]
-        display_latex: bool,
+        /// The format of the output
+        #[arg(long, value_enum, default_value_t)]
+        format: Format,
 
         /// The file to translate
         input: Option<PathBuf>,
@@ -178,6 +178,14 @@ pub enum Command {
         /// The file to visualize
         input: Option<PathBuf>,
     },
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub(crate) enum Format {
+    #[default]
+    Default,
+    Tptp,
+    Latex,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
