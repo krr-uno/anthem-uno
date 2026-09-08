@@ -36,21 +36,23 @@ impl From<fol::Function> for Function {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum Interpretation {
     Standard,
+    Integer,
 }
 
 impl fmt::Display for Interpretation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Interpretation::Standard => write!(f, include_str!("standard_interpretation.p")),
+            Interpretation::Integer => Ok(()),
         }
     }
 }
 
 impl Interpretation {
-    pub fn to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+    pub fn to_file<P: AsRef<Path>>(self, path: P) -> Result<()> {
         let path = path.as_ref();
         let mut file = File::create(path)
             .with_context(|| format!("could not create file `{}`", path.display()))?;
@@ -126,10 +128,10 @@ pub struct Problem {
 }
 
 impl Problem {
-    pub fn with_name<S: Into<String>>(name: S) -> Problem {
+    pub fn with_name<S: Into<String>>(name: S, interpretation: Interpretation) -> Problem {
         Problem {
             name: name.into(),
-            interpretation: Interpretation::Standard,
+            interpretation,
             formulas: vec![],
             preamble: None,
         }
@@ -428,7 +430,7 @@ impl Problem {
                 formulas.push(c);
                 Problem {
                     name: format!("{}_{i}", self.name),
-                    interpretation: self.interpretation.clone(),
+                    interpretation: self.interpretation,
                     formulas,
                     preamble: self.preamble.clone(),
                 }
@@ -450,7 +452,7 @@ impl Problem {
 
                 Problem {
                     name: format!("{}_{i}", self.name),
-                    interpretation: self.interpretation.clone(),
+                    interpretation: self.interpretation,
                     formulas: formulas.clone(),
                     preamble: self.preamble.clone(),
                 }
@@ -469,16 +471,24 @@ impl Problem {
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Preamble
-        match &self.preamble {
-            Some(path) => writeln!(f, "include('{}').", path.display())?,
-            None => write!(f, "{}", self.interpretation)?,
-        }
+        if matches!(self.interpretation, Interpretation::Standard) {
+            match &self.preamble {
+                Some(path) => writeln!(f, "include('{}').", path.display())?,
+                None => write!(f, "{}", self.interpretation)?,
+            }
+        };
 
         // Type declarations for predicates
         for (i, predicate) in self.predicates().into_iter().enumerate() {
             let symbol = predicate.symbol;
-            let input: String =
-                Itertools::intersperse(repeat_n("general", predicate.arity), " * ").collect();
+            let input: String = match self.interpretation {
+                Interpretation::Standard => {
+                    Itertools::intersperse(repeat_n("general", predicate.arity), " * ").collect()
+                }
+                Interpretation::Integer => {
+                    Itertools::intersperse(repeat_n("$int", predicate.arity), " * ").collect()
+                }
+            };
             if predicate.arity > 0 {
                 if predicate.arity == 1 {
                     writeln!(f, "tff(predicate_{i}, type, {symbol}: {input} > $o).")?
@@ -518,7 +528,17 @@ impl fmt::Display for Problem {
                 Sort::Symbol => "symbol",
             };
 
-            let input: String = Itertools::intersperse(repeat_n("general", arity), " * ").collect();
+            let input: String = Itertools::intersperse(
+                repeat_n(
+                    match self.interpretation {
+                        Interpretation::Standard => "general",
+                        Interpretation::Integer => "$int",
+                    },
+                    arity,
+                ),
+                " * ",
+            )
+            .collect();
 
             if arity == 1 {
                 writeln!(f, "tff(function_{i}, type, {name}: {input} > {sort}).")?

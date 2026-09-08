@@ -14,7 +14,10 @@ use {
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
             asp::{mini_gringo, mini_gringo_cl as asp},
-            fol::sigma_0::{self as fol, AxiomatizedTheory},
+            fol::{
+                IntegerConversion,
+                sigma_0::{self as fol, AxiomatizedTheory},
+            },
         },
         translating::{
             classical_reduction::completion::Completion as _,
@@ -28,7 +31,7 @@ use {
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
-            problem::{self, Problem},
+            problem::{self, Interpretation, Problem},
             task::Task,
         },
     },
@@ -191,6 +194,7 @@ pub enum ExternalEquivalenceTaskError {
     SpecificationContainsUnsupportedRoles(fol::AnnotatedFormula),
     SpecificationDefinesOutputPredicates(Vec<fol::Predicate>),
     ProofOutlineError(#[from] ProofOutlineError),
+    FailedIntegerConversion(#[from] anyhow::Error),
 }
 
 impl From<Box<ProofOutlineError>> for ExternalEquivalenceTaskError {
@@ -335,6 +339,9 @@ impl Display for ExternalEquivalenceTaskError {
                     "the specified formula-representation {rep} does not support {frag} programs"
                 )
             }
+            ExternalEquivalenceTaskError::FailedIntegerConversion(error) => {
+                writeln!(f, "conversion to integer-only failed: {error}")
+            }
         }
     }
 }
@@ -379,6 +386,7 @@ pub struct ExternalEquivalenceTask {
     pub bypass_tightness: bool,
     pub simplify: bool,
     pub break_equivalences: bool,
+    pub int_only: bool,
 }
 
 impl ExternalEquivalenceTask {
@@ -672,6 +680,11 @@ impl Task for ExternalEquivalenceTask {
     type Warning = ExternalEquivalenceTaskWarning;
 
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
+        let mut interpretation = Interpretation::Standard;
+        if self.int_only {
+            interpretation = Interpretation::Integer;
+        }
+
         let placeholders = self
             .user_guide
             .placeholders()
@@ -926,14 +939,23 @@ impl Task for ExternalEquivalenceTask {
                 .map(ExternalEquivalenceTaskWarning::from),
         );
 
+        let mut left = left.formulas;
+        let mut right = right.formulas;
+        if self.int_only {
+            left = left.convert_to_integer_domain()?;
+            right = right.convert_to_integer_domain()?;
+            user_guide_assumptions = user_guide_assumptions.convert_to_integer_domain()?;
+        }
+
         Ok(ValidatedExternalEquivalenceTask {
-            left: left.formulas,
-            right: right.formulas,
+            left,
+            right,
             user_guide_assumptions,
             proof_outline: proof_outline_construction.data,
             decomposition: self.decomposition,
             direction: self.direction,
             break_equivalences: self.break_equivalences,
+            interpretation,
         }
         .decompose()?
         .preface_warnings(warnings))
@@ -948,6 +970,7 @@ struct ValidatedExternalEquivalenceTask {
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
     pub break_equivalences: bool,
+    pub interpretation: Interpretation,
 }
 
 impl Task for ValidatedExternalEquivalenceTask {
@@ -1036,6 +1059,7 @@ impl Task for ValidatedExternalEquivalenceTask {
             proof_outline: self.proof_outline,
             decomposition: self.decomposition,
             direction: self.direction,
+            interpretation: self.interpretation,
         }
         .decompose()?
         .preface_warnings(warnings))
@@ -1051,6 +1075,7 @@ struct AssembledExternalEquivalenceTask {
     pub proof_outline: ProofOutline,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
+    pub interpretation: Interpretation,
 }
 
 impl Task for AssembledExternalEquivalenceTask {
@@ -1076,7 +1101,7 @@ impl Task for AssembledExternalEquivalenceTask {
             for (i, lemma) in self.proof_outline.forward_lemmas.iter().enumerate() {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
-                        Problem::with_name(format!("forward_outline_{i}_{j}"))
+                        Problem::with_name(format!("forward_outline_{i}_{j}"), self.interpretation)
                             .add_annotated_formulas(axioms.clone())
                             .add_annotated_formulas(std::iter::once(conjecture.clone()))
                             .rename_conflicting_symbols()
@@ -1087,7 +1112,7 @@ impl Task for AssembledExternalEquivalenceTask {
             }
 
             problems.append(
-                &mut Problem::with_name("forward_problem")
+                &mut Problem::with_name("forward_problem", self.interpretation)
                     .add_annotated_formulas(self.stable_premises.clone())
                     .add_annotated_formulas(self.forward_premises)
                     .add_annotated_formulas(
@@ -1119,18 +1144,21 @@ impl Task for AssembledExternalEquivalenceTask {
             for (i, lemma) in self.proof_outline.backward_lemmas.iter().enumerate() {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
-                        Problem::with_name(format!("backward_outline_{i}_{j}"))
-                            .add_annotated_formulas(axioms.clone())
-                            .add_annotated_formulas(std::iter::once(conjecture.clone()))
-                            .rename_conflicting_symbols()
-                            .create_unique_formula_names(),
+                        Problem::with_name(
+                            format!("backward_outline_{i}_{j}"),
+                            self.interpretation,
+                        )
+                        .add_annotated_formulas(axioms.clone())
+                        .add_annotated_formulas(std::iter::once(conjecture.clone()))
+                        .rename_conflicting_symbols()
+                        .create_unique_formula_names(),
                     );
                 }
                 axioms.append(&mut lemma.consequences.clone());
             }
 
             problems.append(
-                &mut Problem::with_name("backward_problem")
+                &mut Problem::with_name("backward_problem", self.interpretation)
                     .add_annotated_formulas(self.stable_premises)
                     .add_annotated_formulas(self.backward_premises)
                     .add_annotated_formulas(

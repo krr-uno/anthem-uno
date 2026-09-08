@@ -11,7 +11,10 @@ use {
         syntax_tree::{
             GenericPredicate,
             asp::{Definite, mini_gringo, mini_gringo_cl as asp},
-            fol::sigma_0::{self as fol, AxiomatizedTheory, Theory},
+            fol::{
+                IntegerConversion,
+                sigma_0::{self as fol, AxiomatizedTheory, Theory},
+            },
         },
         translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
@@ -19,7 +22,7 @@ use {
         },
         verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
-            problem::{self, AnnotatedFormula, Problem, Role},
+            problem::{self, AnnotatedFormula, Interpretation, Problem, Role},
             task::Task,
         },
     },
@@ -78,6 +81,7 @@ pub enum StrongEquivalenceTaskError {
     ProofOutlineError(#[from] ProofOutlineError),
     ProofOutlineContainsDefinition(fol::AnnotatedFormula),
     UnsupportedLanguageFragmentForFormulaRepresentation(Fragment, FormulaRepresentation),
+    FailedIntegerConversion(#[from] anyhow::Error),
 }
 
 impl From<Box<ProofOutlineError>> for StrongEquivalenceTaskError {
@@ -113,6 +117,9 @@ impl Display for StrongEquivalenceTaskError {
                     "the specified formula-representation {rep} does not support {frag} programs"
                 )
             }
+            StrongEquivalenceTaskError::FailedIntegerConversion(error) => {
+                writeln!(f, "conversion to integer-only failed: {error}")
+            }
         }
     }
 }
@@ -129,6 +136,7 @@ pub struct StrongEquivalenceTask {
     pub spec_dialect: Dialect,
     pub simplify: bool,
     pub break_equivalences: bool,
+    pub int_only: bool,
 }
 
 impl StrongEquivalenceTask {
@@ -188,11 +196,16 @@ impl Task for StrongEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         let mut warnings = self.ensure_absence_of_predicate_declarations()?.warnings;
 
+        let mut interpretation = Interpretation::Standard;
+        if self.int_only {
+            interpretation = Interpretation::Integer;
+        }
+
         // These are axioms to which gamma should not be applied
         let mut general_axioms = IndexSet::new();
 
         // These are the "forall X (hp(X) -> tp(X))" axioms.
-        let transition_axioms = self.transition_axioms();
+        let mut transition_axioms = self.transition_axioms();
 
         // Check if both programs are definite
         let definite = { self.left.definite() && self.right.definite() };
@@ -332,18 +345,29 @@ impl Task for StrongEquivalenceTask {
         let proof_outline = proof_outline_construction.data;
         ensure_absence_of_definitions(&proof_outline)?;
 
+        let mut general_axioms = Theory {
+            formulas: Vec::from_iter(general_axioms),
+        };
+
+        if self.int_only {
+            left = left.convert_to_integer_domain()?;
+            right = right.convert_to_integer_domain()?;
+            user_guide_assumptions = user_guide_assumptions.convert_to_integer_domain()?;
+            transition_axioms = transition_axioms.convert_to_integer_domain()?;
+            general_axioms = general_axioms.convert_to_integer_domain()?;
+        }
+
         Ok(ValidatedStrongEquivalenceTask {
             left,
             right,
             user_guide_assumptions,
             transition_axioms,
-            general_axioms: Theory {
-                formulas: Vec::from_iter(general_axioms),
-            },
+            general_axioms,
             proof_outline,
             definite,
             decomposition: self.decomposition,
             direction: self.direction,
+            interpretation,
         }
         .decompose()?
         .preface_warnings(warnings))
@@ -360,6 +384,7 @@ struct ValidatedStrongEquivalenceTask {
     pub definite: bool,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
+    pub interpretation: Interpretation,
 }
 
 impl Task for ValidatedStrongEquivalenceTask {
@@ -391,7 +416,7 @@ impl Task for ValidatedStrongEquivalenceTask {
             for (i, lemma) in proof_outline.forward_lemmas.iter().enumerate() {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
-                        Problem::with_name(format!("forward_outline_{i}_{j}"))
+                        Problem::with_name(format!("forward_outline_{i}_{j}"), self.interpretation)
                             .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
                                 name: format!("transition_axiom_{i}"),
                                 role: Role::Axiom,
@@ -421,7 +446,7 @@ impl Task for ValidatedStrongEquivalenceTask {
 
             // Add the Forward problems to problem list
             problems.append(
-                &mut Problem::with_name("forward")
+                &mut Problem::with_name("forward", self.interpretation)
                     .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
                         role: Role::Axiom,
@@ -457,35 +482,36 @@ impl Task for ValidatedStrongEquivalenceTask {
             for (i, lemma) in proof_outline.backward_lemmas.iter().enumerate() {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
-                        Problem::with_name(format!("backward_outline_{i}_{j}"))
-                            .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
-                                name: format!("transition_axiom_{i}"),
-                                role: Role::Axiom,
-                                formula,
-                            })
-                            .add_theory(self.general_axioms.clone(), |i, formula| {
-                                AnnotatedFormula {
-                                    name: format!("general_axiom_{i}"),
-                                    role: Role::Axiom,
-                                    formula,
-                                }
-                            })
-                            .add_annotated_formulas(backward_axioms.clone())
-                            .add_theory(self.right.clone(), |i, formula| AnnotatedFormula {
-                                name: format!("right_{i}"),
-                                role: Role::Axiom,
-                                formula,
-                            })
-                            .add_annotated_formulas(std::iter::once(conjecture.clone()))
-                            .rename_conflicting_symbols()
-                            .create_unique_formula_names(),
+                        Problem::with_name(
+                            format!("backward_outline_{i}_{j}"),
+                            self.interpretation,
+                        )
+                        .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                            name: format!("transition_axiom_{i}"),
+                            role: Role::Axiom,
+                            formula,
+                        })
+                        .add_theory(self.general_axioms.clone(), |i, formula| AnnotatedFormula {
+                            name: format!("general_axiom_{i}"),
+                            role: Role::Axiom,
+                            formula,
+                        })
+                        .add_annotated_formulas(backward_axioms.clone())
+                        .add_theory(self.right.clone(), |i, formula| AnnotatedFormula {
+                            name: format!("right_{i}"),
+                            role: Role::Axiom,
+                            formula,
+                        })
+                        .add_annotated_formulas(std::iter::once(conjecture.clone()))
+                        .rename_conflicting_symbols()
+                        .create_unique_formula_names(),
                     );
                 }
                 backward_axioms.append(&mut lemma.consequences.clone());
             }
 
             problems.append(
-                &mut Problem::with_name("backward")
+                &mut Problem::with_name("backward", self.interpretation)
                     .add_theory(transition_axioms, |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
                         role: Role::Axiom,

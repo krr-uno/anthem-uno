@@ -152,6 +152,10 @@ pub enum Command {
         #[arg(long, short = 'm', default_value_t = 1)]
         prover_cores: usize,
 
+        /// Remove standard preamble in favor of a one-sorted, integer-only background theory
+        #[arg(long, action)]
+        int_only: bool,
+
         /// The destination directory for the problem files
         #[arg(long)]
         save_problems: Option<PathBuf>,

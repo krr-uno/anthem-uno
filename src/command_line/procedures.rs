@@ -369,6 +369,7 @@ pub fn main() -> Result<()> {
             time_limit,
             prover_instances,
             prover_cores,
+            int_only,
             save_problems: out_dir,
             files,
             formula_representation,
@@ -411,6 +412,7 @@ pub fn main() -> Result<()> {
                         direction,
                         simplify: !no_simplify,
                         break_equivalences: !no_eq_break,
+                        int_only,
                     }
                     .decompose()?
                     .report_warnings()
@@ -448,6 +450,7 @@ pub fn main() -> Result<()> {
                     bypass_tightness,
                     simplify: !no_simplify,
                     break_equivalences: !no_eq_break,
+                    int_only,
                 }
                 .decompose()?
                 .report_warnings(),
