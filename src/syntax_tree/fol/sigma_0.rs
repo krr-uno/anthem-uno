@@ -94,7 +94,7 @@ impl IntegerTerm {
             IntegerTerm::Variable(s) if var.name == s && var.sort == Sort::Integer => term,
             IntegerTerm::Numeral(_)
             | IntegerTerm::FunctionConstant(_)
-            | IntegerTerm::Variable(_) => self,
+            | IntegerTerm::Variable(_) => self, // TODO: why is the variable case ineligible for substitution?
             IntegerTerm::UnaryOperation { op, arg } => IntegerTerm::UnaryOperation {
                 op,
                 arg: arg.substitute(var, term).into(),
@@ -178,6 +178,28 @@ impl Function {
         }
         constants
     }
+
+    fn symbols(&self) -> IndexSet<String> {
+        let mut symbols = IndexSet::new();
+        for term in self.terms.iter() {
+            symbols.extend(term.symbols());
+        }
+        symbols
+    }
+
+    fn substitute(&self, var: Variable, term: GeneralTerm) -> Function {
+        let terms = self
+            .terms
+            .clone()
+            .into_iter()
+            .map(|t| t.substitute(var.clone(), term.clone()))
+            .collect();
+        Function {
+            function_symbol: self.function_symbol.clone(),
+            sort: self.sort,
+            terms,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -212,7 +234,7 @@ impl GeneralTerm {
     pub fn symbols(&self) -> IndexSet<String> {
         match &self {
             GeneralTerm::SymbolicTerm(t) => t.symbols(),
-            GeneralTerm::Function { .. } => todo!(),
+            GeneralTerm::Function(f) => f.symbols(),
             _ => IndexSet::new(),
         }
     }
@@ -232,6 +254,18 @@ impl GeneralTerm {
         }
     }
 
+    fn functions(&self) -> IndexSet<Function> {
+        match &self {
+            GeneralTerm::Infimum
+            | GeneralTerm::Supremum
+            | GeneralTerm::Variable(_)
+            | GeneralTerm::FunctionConstant(_)
+            | GeneralTerm::IntegerTerm(_)
+            | GeneralTerm::SymbolicTerm(_) => IndexSet::new(),
+            GeneralTerm::Function(f) => IndexSet::from([f.clone()]),
+        }
+    }
+
     pub fn substitute(self, var: Variable, term: GeneralTerm) -> Self {
         match self {
             GeneralTerm::Variable(s) if var.name == s && var.sort == Sort::General => term,
@@ -245,10 +279,15 @@ impl GeneralTerm {
                 GeneralTerm::SymbolicTerm(term) => {
                     GeneralTerm::SymbolicTerm(t.substitute(var, term))
                 }
+                GeneralTerm::Function(f) if f.sort == Sort::Symbol => match t {
+                    SymbolicTerm::Variable(s) if var.name == s => GeneralTerm::Function(f),
+                    _ => GeneralTerm::SymbolicTerm(t),
+                },
                 _ => panic!(
                     "cannot substitute general term `{term}` for the symbolic variable `{var}`"
                 ),
             },
+            GeneralTerm::Function(f) => GeneralTerm::Function(f.substitute(var, term)),
             t => t,
         }
     }
@@ -463,6 +502,10 @@ impl Guard {
         self.term.function_constants()
     }
 
+    fn functions(&self) -> IndexSet<Function> {
+        self.term.functions()
+    }
+
     pub fn replace_placeholders(self, mapping: &IndexMap<String, FunctionConstant>) -> Self {
         Guard {
             relation: self.relation,
@@ -630,6 +673,26 @@ impl AtomicFormula {
                     function_constants.extend(guard.function_constants())
                 }
                 function_constants
+            }
+        }
+    }
+
+    fn functions(&self) -> IndexSet<Function> {
+        match &self {
+            AtomicFormula::Falsity | AtomicFormula::Truth => IndexSet::new(),
+            AtomicFormula::Atom(a) => {
+                let mut functions = IndexSet::new();
+                for t in a.terms.iter() {
+                    functions.extend(t.functions());
+                }
+                functions
+            }
+            AtomicFormula::Comparison(c) => {
+                let mut functions = c.term.functions();
+                for guard in c.guards.iter() {
+                    functions.extend(guard.functions())
+                }
+                functions
             }
         }
     }
@@ -880,6 +943,8 @@ impl Formula {
         }
     }
 
+    // A special type of zero-arity function constant that is
+    // interpreted in a Herbrand way ('a' is always a Symbol 'a')
     pub fn symbols(&self) -> IndexSet<String> {
         match &self {
             Formula::AtomicFormula(f) => f.symbols(),
@@ -893,6 +958,8 @@ impl Formula {
         }
     }
 
+    // A zero-arity function constant that may be of a sort other than Symbol
+    // and is not necessarily Herbrand
     pub fn function_constants(&self) -> IndexSet<FunctionConstant> {
         match &self {
             Formula::AtomicFormula(f) => f.function_constants(),
@@ -903,6 +970,20 @@ impl Formula {
                 vars
             }
             Formula::QuantifiedFormula { formula, .. } => formula.function_constants(),
+        }
+    }
+
+    // A function constant of arity > 1 and a specified sort
+    pub(crate) fn functions(&self) -> IndexSet<Function> {
+        match &self {
+            Formula::AtomicFormula(f) => f.functions(),
+            Formula::UnaryFormula { formula, .. } => formula.functions(),
+            Formula::BinaryFormula { lhs, rhs, .. } => {
+                let mut functions = lhs.functions();
+                functions.extend(rhs.functions());
+                functions
+            }
+            Formula::QuantifiedFormula { formula, .. } => formula.functions(),
         }
     }
 
@@ -1070,6 +1151,12 @@ impl FromIterator<Formula> for Theory {
             formulas: iter.into_iter().collect(),
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct AxiomatizedTheory {
+    pub axioms: Theory,
+    pub theory: Theory,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -1265,7 +1352,11 @@ impl FromIterator<UserGuideEntry> for UserGuide {
 
 #[cfg(test)]
 mod tests {
-    use {super::Formula, indexmap::IndexSet};
+    use {
+        super::Formula,
+        crate::{syntax_tree::fol::sigma_0::Sort, verifying::problem},
+        indexmap::IndexSet,
+    };
 
     #[test]
     fn test_formula_conjoin() {
@@ -1363,13 +1454,61 @@ mod tests {
                 "Y",
                 "Y = 5 and exists Y2 ( p(Y, Y2, Y1) )",
             ),
+            ("forall X p(X,Y)", "Y", "f$s(1,2)", "forall X p(X,f$s(1,2))"),
+            (
+                "forall X p(X,Y)",
+                "Y",
+                "f$s(1,X)",
+                "forall X1 p(X1,f$s(1,X))",
+            ),
+            (
+                "p(X) and exists Y q(X,Y)",
+                "X",
+                "f$s(1,2)",
+                "p(f$s(1,2)) and exists Y q(f$s(1,2),Y)",
+            ),
+            (
+                "p(X) and exists Y q(X,Y)",
+                "X",
+                "f$s(Y)",
+                "p(f$s(Y)) and exists Y1 q(f$s(Y),Y1)",
+            ),
+            (
+                "forall X p(f$s(X,Y))",
+                "Y",
+                "Z$+1",
+                "forall X p(f$s(X,Z$+1))",
+            ),
+            ("forall X p(f$s(X,Y))", "Y", "X", "forall X1 p(f$s(X1,X))"),
+            (
+                "forall X p(f$s(g$s(Y),a,Y))",
+                "Y",
+                "Z$+1",
+                "forall X p(f$s(g$s(Z$+1),a,Z$+1))",
+            ),
+            ("p(X$s)", "X$s", "f$s(1,2)", "p(f$s(1,2))"),
+            //("p(X$s)", "X$s", "f$i(1,2)", "p(X$s)"),
         ] {
-            assert_eq!(
-                src.parse::<Formula>()
-                    .unwrap()
-                    .substitute(var.parse().unwrap(), term.parse().unwrap()),
-                target.parse().unwrap()
-            )
+            let src = src
+                .parse::<Formula>()
+                .unwrap()
+                .substitute(var.parse().unwrap(), term.parse().unwrap());
+            let target = target.parse().unwrap();
+            assert_eq!(src, target, "\n{src} \n!=\n {target}")
+        }
+    }
+
+    #[test]
+    fn test_formula_functions() {
+        let formula: Formula = "forall V1 X (V1 = X and exists Z Z1 (exists X1 (X1 = X and Z = f$s(X1)) and exists X1 (X1 = a and Z1 = f$s(X1)) and Z = Z1) -> p(V1))".parse().unwrap();
+        let target = problem::Function {
+            function_symbol: "f".to_string(),
+            sort: Sort::Symbol,
+            arity: 1,
+        };
+        for f in formula.functions() {
+            let src: problem::Function = f.into();
+            assert_eq!(src, target)
         }
     }
 }

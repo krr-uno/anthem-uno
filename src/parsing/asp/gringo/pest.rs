@@ -123,16 +123,24 @@ impl PestParser for TermParser {
             .map_primary(|primary| match primary.as_rule() {
                 internal::Rule::term => TermParser::translate_pair(primary),
                 internal::Rule::herbrand_function => {
-                    let mut pairs = primary.into_inner();
+                    let mut pairs = primary.into_inner().peekable();
 
-                    let symbol = pairs
-                        .next()
-                        .unwrap_or_else(|| Self::report_missing_pair())
-                        .as_str()
-                        .into();
-                    let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+                    let pair = pairs.peek().unwrap_or_else(|| Self::report_missing_pair());
 
-                    Term::HerbrandFunction { symbol, terms }
+                    match pair.as_rule() {
+                        internal::Rule::symbol => {
+                            let symbol = pair.as_str().into();
+                            pairs.next();
+                            let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+                            Term::HerbrandFunction { symbol, terms }
+                        }
+                        internal::Rule::term => {
+                            let symbol = String::from("blank");
+                            let terms: Vec<_> = pairs.map(TermParser::translate_pair).collect();
+                            Term::HerbrandFunction { symbol, terms }
+                        }
+                        _ => Self::report_unexpected_pair(pair.clone()),
+                    }
                 }
                 internal::Rule::absolute_valued_term => Term::UnaryOperation {
                     op: UnaryOperator::AbsoluteValue,
@@ -1145,6 +1153,45 @@ mod tests {
                         ],
                     },
                 ),
+                (
+                    "quack(p((X,(1+2)), (1+2)*3), 2)",
+                    Atom {
+                        predicate_symbol: "quack".into(),
+                        terms: vec![
+                            Term::HerbrandFunction {
+                                symbol: "p".into(),
+                                terms: vec![
+                                    Term::HerbrandFunction {
+                                        symbol: "blank".into(),
+                                        terms: vec![
+                                            Term::Variable(Variable {
+                                                name: Some("X".into()),
+                                            }),
+                                            Term::BinaryOperation {
+                                                op: BinaryOperator::Add,
+                                                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1))
+                                                    .into(),
+                                                rhs: Term::BasicSymbol(BasicSymbol::Numeral(2))
+                                                    .into(),
+                                            },
+                                        ],
+                                    },
+                                    Term::BinaryOperation {
+                                        op: BinaryOperator::Multiply,
+                                        lhs: Term::BinaryOperation {
+                                            op: BinaryOperator::Add,
+                                            lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)).into(),
+                                            rhs: Term::BasicSymbol(BasicSymbol::Numeral(2)).into(),
+                                        }
+                                        .into(),
+                                        rhs: Term::BasicSymbol(BasicSymbol::Numeral(3)).into(),
+                                    },
+                                ],
+                            },
+                            Term::BasicSymbol(BasicSymbol::Numeral(2)),
+                        ],
+                    },
+                ),
             ])
             .should_reject(["p(1,)", "1", "P", "p("]);
     }
@@ -1222,16 +1269,38 @@ mod tests {
 
     #[test]
     fn parse_comparison() {
-        ComparisonParser.should_parse_into([(
-            "1 < N",
-            Comparison {
-                relation: Relation::Less,
-                lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
-                rhs: Term::Variable(Variable {
-                    name: Some("N".into()),
-                }),
-            },
-        )]);
+        ComparisonParser.should_parse_into([
+            (
+                "1 < N",
+                Comparison {
+                    relation: Relation::Less,
+                    lhs: Term::BasicSymbol(BasicSymbol::Numeral(1)),
+                    rhs: Term::Variable(Variable {
+                        name: Some("N".into()),
+                    }),
+                },
+            ),
+            (
+                "(X,Y) = N",
+                Comparison {
+                    relation: Relation::Equal,
+                    lhs: Term::HerbrandFunction {
+                        symbol: "blank".into(),
+                        terms: vec![
+                            Term::Variable(Variable {
+                                name: Some("X".into()),
+                            }),
+                            Term::Variable(Variable {
+                                name: Some("Y".into()),
+                            }),
+                        ],
+                    },
+                    rhs: Term::Variable(Variable {
+                        name: Some("N".into()),
+                    }),
+                },
+            ),
+        ]);
     }
 
     #[test]

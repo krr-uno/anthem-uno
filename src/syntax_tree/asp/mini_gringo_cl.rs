@@ -240,6 +240,10 @@ impl From<asp::mini_gringo::Term> for Term {
                     rhs: right.into(),
                 }
             }
+            asp::mini_gringo::Term::HerbrandFunction { symbol, terms } => Term::HerbrandFunction {
+                symbol,
+                terms: terms.into_iter().map(|t| t.into()).collect(),
+            },
         }
     }
 }

@@ -1,0 +1,8 @@
+input: m -> integer.
+input: z -> integer.
+input: n -> integer.
+assumption: m = 17.
+assumption: z = 66000.
+assumption: n > 0.
+assumption: n < 5.
+output: fermat/1.

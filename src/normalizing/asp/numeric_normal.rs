@@ -4,9 +4,11 @@ use crate::{
     convenience::variable_selection::VariableSelection,
     syntax_tree::asp::mini_gringo::{
         Atom, AtomicFormula, BasicSymbol, Body, Comparison, Head, Literal, Program, Relation, Rule,
-        Term, Variable,
+        Sign, Term, Variable,
     },
 };
+
+// TODO: replace taken_vars parameter with mutable reference to taken_vars
 
 // basic symbols in sigma_0 include symbolic constants, numerals, inf, and sup
 // when we don't allow constructor functions, basic symbols are just the set of precomputed terms
@@ -24,6 +26,35 @@ fn term_replacement(
     rhs_of_numeric_equation: bool,
 ) -> (Term, Option<Comparison>) {
     match term {
+        Term::HerbrandFunction { symbol, terms } => {
+            if within_arithmetic_scope {
+                let v = Variable(taken_vars.choose_fresh_variable("V"));
+                let v_equals_t = Comparison {
+                    relation: Relation::Equal,
+                    lhs: Term::Variable(v.clone()),
+                    rhs: Term::HerbrandFunction { symbol, terms },
+                };
+                (Term::Variable(v), Some(v_equals_t))
+            } else {
+                let mut v_equals_t = None;
+                let mut new_terms = terms.clone();
+                for (i, term) in terms.into_iter().enumerate() {
+                    let (current, vt) = term_replacement(term, taken_vars.clone(), false, false);
+                    if vt.is_some() {
+                        new_terms[i] = current;
+                        v_equals_t = vt;
+                        break;
+                    }
+                }
+                (
+                    Term::HerbrandFunction {
+                        symbol,
+                        terms: new_terms,
+                    },
+                    v_equals_t,
+                )
+            }
+        }
         Term::BasicSymbol(ref pct) => {
             // abnormal term, case a
             if within_arithmetic_scope && !leading_symbol_is_arithmetic_compatible(pct) {
@@ -237,10 +268,32 @@ fn term_replacement_rule(rule: Rule) -> Rule {
     }
 }
 
+// {H} :- Body
+//   ==>
+// H :- Body, not not H
+fn normalize_choice_rule(rule: Rule) -> Rule {
+    let head = rule.head.clone();
+    match head {
+        Head::Basic(_) | Head::Falsity => rule,
+        Head::Choice(atom) => {
+            let new_head = Head::Basic(atom.clone());
+            let mut formulas = rule.body.formulas;
+            formulas.push(AtomicFormula::Literal(Literal {
+                sign: Sign::DoubleNegation,
+                atom,
+            }));
+            Rule {
+                head: new_head,
+                body: Body { formulas },
+            }
+        }
+    }
+}
+
 // innermost term replacement can occur in any order
 // so, remove abnormalities in the head, then the body constructs (DFS)
 // apply procedure until rule stops changing
-fn numeric_normal_form_rule(rule: Rule) -> Rule {
+pub(crate) fn numeric_normal_form_rule(rule: Rule) -> Rule {
     let mut previous = rule;
     let mut current = term_replacement_rule(previous.clone());
 
@@ -249,7 +302,7 @@ fn numeric_normal_form_rule(rule: Rule) -> Rule {
         current = term_replacement_rule(previous.clone());
     }
 
-    current
+    normalize_choice_rule(current)
 }
 
 pub fn numeric_normal_form(program: Program) -> Program {
@@ -288,6 +341,11 @@ mod tests {
             ("1", true, false, "1"),
             ("1/0", false, false, "V0"),
             ("1/0", false, true, "1/0"),
+            // constructors
+            ("f(a)", false, false, "f(a)"),
+            ("f(a)", true, false, "V0"),
+            ("f(X,Y+1)", false, false, "f(X,Y+1)"),
+            ("f(X,a+1)", false, false, "f(X,V0+1)"),
             // unary op
             ("-(X+1)", false, false, "-(X+1)"),
             ("-(4-1)", false, false, "-(4-1)"),
@@ -307,6 +365,7 @@ mod tests {
             ("4-(a+1)", false, false, "4-(V0+1)"),
             ("4-(X+1)", true, false, "4-(X+1)"),
             ("4-(a+1)", true, false, "4-(V0+1)"),
+            ("4+f(a)", false, false, "4+V0"),
             ("(4*a)-(a+1)", false, false, "(4*V0)-(a+1)"),
             ("((4*(1-a))+b)-(a+1)", false, false, "((4*(1-V0))+b)-(a+1)"),
         ] {
@@ -344,6 +403,8 @@ mod tests {
     fn test_numeric_normal_form_rule() {
         for (src, target) in [
             ("p(1..8).", "p(V0) :- V0 = 1..8."),
+            ("{p(1..8)}.", "p(V0) :- V0 = 1..8, not not p(V0)."),
+            ("{r} :- t.", "r :- t, not not r."),
             ("p(X/Y+1) :- q(X,Y).", "p(V0+1) :- q(X,Y), V0 = X/Y."),
             (
                 "q(1..(X/2)) :- p(X).",
@@ -351,11 +412,15 @@ mod tests {
             ),
             (
                 "{q(1..8)} :- 4 = 1/X, p((1+a)..5).",
-                "{q(V0)} :- 4 = 1/X, p(V2), V0 = 1..8, V1 = a, V2 = 1+V1..5.",
+                "q(V0) :- 4 = 1/X, p(V2), V0 = 1..8, V1 = a, V2 = 1+V1..5, not not q(V0).",
             ),
             (
                 ":- 1/Y = 4, p(Y), q(Y/5).",
                 ":- V0 = 4, p(Y), q(V1), V0 = 1/Y, V1 = Y/5.",
+            ),
+            (
+                ":- not p(0, f(a, X+1, b-3)).",
+                ":- not p(0, f(a, X+1, V0-3)), V0 = b.",
             ),
         ] {
             let src = numeric_normal_form_rule(src.parse().unwrap());

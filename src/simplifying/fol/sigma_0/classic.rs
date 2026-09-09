@@ -1,8 +1,8 @@
 use crate::{
     convenience::unbox::{Unbox as _, fol::sigma_0::UnboxedFormula},
     syntax_tree::fol::sigma_0::{
-        AtomicFormula, BinaryConnective, Formula, GeneralTerm, IntegerTerm, Quantification,
-        Quantifier, Relation, Sort, SymbolicTerm, UnaryConnective, Variable,
+        AtomicFormula, BinaryConnective, Formula, Function, GeneralTerm, IntegerTerm,
+        Quantification, Quantifier, Relation, Sort, SymbolicTerm, UnaryConnective, Variable,
     },
 };
 
@@ -54,6 +54,13 @@ pub fn substitute_defined_variables(formula: Formula) -> Formula {
                     | (
                         GeneralTerm::SymbolicTerm(SymbolicTerm::Variable(name)),
                         GeneralTerm::SymbolicTerm(_),
+                        Sort::Symbol,
+                    )
+                    | (
+                        GeneralTerm::SymbolicTerm(SymbolicTerm::Variable(name)),
+                        GeneralTerm::Function(Function {
+                            sort: Sort::Symbol, ..
+                        }),
                         Sort::Symbol,
                     ) if variable.name == *name && !term.variables().contains(variable) => {
                         Some(term)
@@ -152,6 +159,14 @@ mod tests {
             (
                 "forall X$i (X$i = 1 and p(X$i))",
                 "forall X$i (X$i = 1 and p(X$i))",
+            ),
+            (
+                "exists X (X = f$s(a) and p(X))",
+                "exists X (f$s(a) = f$s(a) and p(f$s(a)))",
+            ),
+            (
+                "exists X$s (X$s = f$s(a) and p(X$s))",
+                "exists X$s (f$s(a) = f$s(a) and p(f$s(a)))",
             ),
         ] {
             assert_eq!(

@@ -1,5 +1,6 @@
 use crate::{
     command_line::arguments::Dialect,
+    normalizing::fol::completable::make_formula_completable,
     syntax_tree::{asp::mini_gringo as asp, fol::sigma_0 as fol},
     translating::formula_representation::{natural, tau_star},
 };
@@ -19,7 +20,7 @@ impl Mu for asp::Program {
 
         for r in self.rules {
             match natural::natural_rule(&r) {
-                Some(f) => match natural::make_formula_completable(f, &globals) {
+                Some(f) => match make_formula_completable(f, &globals) {
                     Some(formula) => formulas.push(formula),
                     None => formulas.push(tau_star::tau_star_rule(r, &globals, dialect)),
                 },

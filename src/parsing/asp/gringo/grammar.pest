@@ -29,7 +29,10 @@ binary_operator_eoi = _{ binary_operator ~ EOI }
 absolute_valued_term = { "|" ~ term ~ "|" }
 absolute_valued_term_eoi = _{ absolute_valued_term ~ EOI }
 
-herbrand_function = { symbol ~ term_tuple }
+herbrand_function = { (symbol ~ unary_term_tuple) | (symbol? ~ n_ary_term_tuple) }
+    term_tuple =       _{ "(" ~ (term ~ ("," ~ term)*)? ~ ")" }
+    unary_term_tuple = _{ "(" ~ term ~ ")" }
+    n_ary_term_tuple = _{ "(" ~ term ~ ("," ~ term)+ ~ ")" }
 
 term = { unary_operator* ~ primary_term ~ (binary_operator ~ unary_operator* ~ primary_term)* }
 term_eoi = _{ term ~ EOI }
@@ -41,7 +44,6 @@ predicate_eoi = _{ predicate ~ EOI }
 
 atom = { symbol ~ term_tuple? }
 atom_eoi = _{ atom ~ EOI }
-    term_tuple = _{ "(" ~ (term ~ ("," ~ term)*)? ~ ")" }
 
 sign = { negation{0, 2} }
 sign_eoi = _{ sign ~ EOI }

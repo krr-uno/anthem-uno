@@ -2,22 +2,29 @@ use {
     crate::{
         analyzing::{private_recursion::PrivateRecursion, tightness::Tightness},
         breaking::fol::sigma_0::ht::break_equivalences_annotated_formula,
-        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation},
+        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment},
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
         },
+        normalizing::{
+            asp::numeric_normal::numeric_normal_form, fol::completable::MakeCompletable,
+        },
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
         syntax_tree::{
             asp::{mini_gringo, mini_gringo_cl as asp},
-            fol::sigma_0 as fol,
+            fol::sigma_0::{self as fol, AxiomatizedTheory},
         },
         translating::{
             classical_reduction::completion::Completion as _,
-            formula_representation::{mu::Mu as _, tau_star::TauStar as _},
+            formula_representation::{
+                numeric_natural::numeric_natural,
+                tau_star::{self, TauStar as _},
+            },
         },
         verifying::{
+            anf_deduplicate,
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
@@ -170,7 +177,7 @@ pub struct InvalidPredicateErrorContent {
 
 #[derive(Error, Debug)]
 pub enum ExternalEquivalenceTaskError {
-    UnsupportedFormulaRepresentation(String),
+    UnsupportedLanguageFragmentForFormulaRepresentation(Fragment, FormulaRepresentation),
     NonTightProgram(asp::Program),
     ProgramContainsPrivateRecursion(asp::Program),
     InputOutputPredicatesOverlap(Vec<fol::Predicate>),
@@ -303,12 +310,6 @@ impl Display for ExternalEquivalenceTaskError {
                     "the role of the following formula is not supported in specifications: {formula}"
                 )
             }
-            ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(s) => {
-                writeln!(
-                    f,
-                    "program cannot be converted to a dialect for which mu is supported due to the following error: {s}"
-                )
-            }
             ExternalEquivalenceTaskError::SpecificationDefinesOutputPredicates(predicates) => {
                 write!(
                     f,
@@ -324,6 +325,15 @@ impl Display for ExternalEquivalenceTaskError {
                 }
 
                 writeln!(f)
+            }
+            ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(
+                frag,
+                rep,
+            ) => {
+                writeln!(
+                    f,
+                    "the specified formula-representation {rep} does not support {frag} programs"
+                )
             }
         }
     }
@@ -363,7 +373,7 @@ pub struct ExternalEquivalenceTask {
     pub proof_outline: fol::Specification,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
-    pub formula_representation: FormulaRepresentation,
+    pub representation: FormulaRepresentation,
     pub program_dialect: Dialect,
     pub spec_dialect: Dialect,
     pub bypass_tightness: bool,
@@ -747,46 +757,86 @@ impl Task for ExternalEquivalenceTask {
 
         #[allow(clippy::result_large_err)]
         let theory_translate = |program: asp::Program, dialect: Dialect| {
-            let translation = match self.formula_representation {
+            let translation =
+            match self.representation {
                 FormulaRepresentation::Mu => match mini_gringo::Program::try_from(program) {
-                    Ok(prog) => Ok(prog
-                        .mu(dialect)
-                        .replace_placeholders(&placeholders)
-                        .completion(self.user_guide.input_predicates())
-                        .expect("mu did not create a completable theory")),
-                    Err(e) => Err(
-                        ExternalEquivalenceTaskError::UnsupportedFormulaRepresentation(
-                            e.to_string(),
-                        ),
-                    ),
+                    Ok(_) => todo!("mu isn't defined for programs with constructors"),
+                    Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::Mu)),
                 },
-                FormulaRepresentation::TauStar => Ok(program
+                FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(program) {
+                    Ok(program) => {
+                        let var_names = tau_star::choose_fresh_global_variables(&program);
+                        let nnf = numeric_natural(numeric_normal_form(program), dialect);
+
+                        // Predicates for which a completion formula should not be generated
+                        let mut no_completion_predicates = self.user_guide.input_predicates();
+                        let mut arithmetic_predicates: IndexSet<fol::Predicate> = IndexSet::from_iter(vec![
+                            fol::Predicate { symbol: "intervalGraph".into(), arity: 3 },
+                            fol::Predicate { symbol: "divisionGraphG5".into(), arity: 3 },
+                            fol::Predicate { symbol: "divisionGraphG6".into(), arity: 3 },
+                            fol::Predicate { symbol: "moduloGraphG5".into(), arity: 3 },
+                            fol::Predicate { symbol: "moduloGraphG6".into(), arity: 3 },
+                        ]);
+                        no_completion_predicates.append(&mut arithmetic_predicates);
+
+                        Ok(AxiomatizedTheory {
+                            axioms: nnf.axioms,
+                            theory: nnf.theory
+                            .replace_placeholders(&placeholders)
+                            .make_completable(&var_names)
+                            .expect("numeric-natural did not create a completable theory")
+                            .completion(no_completion_predicates)
+                            .expect("make-completable did not create a completable theory"),
+                        })
+                    },
+                    Err(_) => Err(ExternalEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural)),
+                },
+                FormulaRepresentation::TauStar => Ok(fol::AxiomatizedTheory{
+                    axioms: fol::Theory { formulas: Vec::new() },
+                    theory: program
                     .tau_star(dialect)
                     .replace_placeholders(&placeholders)
                     .completion(self.user_guide.input_predicates())
-                    .expect("tau_star did not create a completable theory")),
+                    .expect("tau_star did not create a completable theory")
+            }),
             };
 
             match translation {
-                Ok(mut theory) => {
+                Ok(mut ax_theory) => {
                     if self.simplify {
                         let mut portfolio =
                             [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
-                        theory = theory
+                        ax_theory.theory = ax_theory
+                            .theory
                             .into_iter()
                             .map(|f| f.apply_fixpoint(&mut portfolio))
                             .collect();
                     }
 
-                    Ok(theory)
+                    Ok(ax_theory)
                 }
                 Err(e) => Err(e),
             }
         };
 
-        let control_translate = |theory: fol::Theory| {
+        let control_translate = |ax_theory: fol::AxiomatizedTheory| {
+            let mut axiom_counter = 0..;
             let mut constraint_counter = 0..;
-            let formulas = theory
+
+            let mut formulas: Vec<fol::AnnotatedFormula> = ax_theory
+                .axioms
+                .formulas
+                .into_iter()
+                .map(|formula| fol::AnnotatedFormula {
+                    role: fol::Role::Assumption,
+                    direction: fol::Direction::Universal,
+                    name: format!("general_axiom_{}", axiom_counter.next().unwrap()),
+                    formula,
+                })
+                .collect();
+
+            let mut theory_formulas: Vec<fol::AnnotatedFormula> = ax_theory
+                .theory
                 .formulas
                 .into_iter()
                 .map(|formula| match head_predicate(&formula) {
@@ -810,6 +860,9 @@ impl Task for ExternalEquivalenceTask {
                     },
                 })
                 .collect();
+
+            formulas.append(&mut theory_formulas);
+
             fol::Specification { formulas }
         };
 
@@ -975,11 +1028,11 @@ impl Task for ValidatedExternalEquivalenceTask {
         }
 
         Ok(AssembledExternalEquivalenceTask {
-            stable_premises,
-            forward_premises,
-            forward_conclusions,
-            backward_premises,
-            backward_conclusions,
+            stable_premises: anf_deduplicate(stable_premises),
+            forward_premises: anf_deduplicate(forward_premises),
+            forward_conclusions: anf_deduplicate(forward_conclusions),
+            backward_premises: anf_deduplicate(backward_premises),
+            backward_conclusions: anf_deduplicate(backward_conclusions),
             proof_outline: self.proof_outline,
             decomposition: self.decomposition,
             direction: self.direction,

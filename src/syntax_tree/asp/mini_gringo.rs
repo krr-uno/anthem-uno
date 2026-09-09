@@ -117,6 +117,10 @@ impl BinaryOperator {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Term {
     BasicSymbol(BasicSymbol),
+    HerbrandFunction {
+        symbol: String,
+        terms: Vec<Term>,
+    },
     Variable(Variable),
     UnaryOperation {
         op: UnaryOperator,
@@ -179,6 +183,15 @@ impl Term {
     pub fn contains_arithmetic(&self) -> bool {
         match &self {
             Term::BasicSymbol(_) | Term::Variable(_) => false,
+            Term::HerbrandFunction { terms, .. } => {
+                let mut flag = false;
+                for term in terms {
+                    if term.contains_arithmetic() {
+                        flag = true;
+                    }
+                }
+                flag
+            }
             Term::UnaryOperation { .. } | Term::BinaryOperation { .. } => true,
         }
     }
@@ -190,6 +203,13 @@ impl Term {
     pub fn variables(&self) -> IndexSet<Variable> {
         match &self {
             Term::BasicSymbol(_) => IndexSet::new(),
+            Term::HerbrandFunction { terms, .. } => {
+                let mut vars = IndexSet::new();
+                for term in terms {
+                    vars.extend(term.variables());
+                }
+                vars
+            }
             Term::Variable(v) => IndexSet::from([v.clone()]),
             Term::UnaryOperation { arg, .. } => arg.variables(),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -203,6 +223,13 @@ impl Term {
     pub fn function_constants(&self) -> IndexSet<String> {
         match &self {
             Term::BasicSymbol(t) => t.function_constants(),
+            Term::HerbrandFunction { terms, .. } => {
+                let mut functions = IndexSet::new();
+                for term in terms {
+                    functions.extend(term.function_constants());
+                }
+                functions
+            }
             Term::Variable(_) => IndexSet::new(),
             Term::UnaryOperation { arg, .. } => arg.function_constants(),
             Term::BinaryOperation { lhs, rhs, .. } => {
@@ -216,9 +243,43 @@ impl Term {
     pub fn numeric(&self) -> bool {
         match &self {
             Term::BasicSymbol(t) => matches!(t, &BasicSymbol::Numeral(_)),
+            Term::HerbrandFunction { .. } => false,
             Term::Variable(_) => true,
             Term::UnaryOperation { arg, .. } => (**arg).numeric(),
             Term::BinaryOperation { lhs, rhs, .. } => (**lhs).numeric() && (**rhs).numeric(),
+        }
+    }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        match &self {
+            Term::BasicSymbol(_) | Term::Variable(_) => IndexSet::new(),
+            Term::HerbrandFunction { terms, .. } => {
+                let mut functions = IndexSet::new();
+                for term in terms {
+                    functions.extend(term.indefinite_functions());
+                }
+                functions
+            }
+            Term::UnaryOperation { arg, .. } => arg.indefinite_functions(),
+            Term::BinaryOperation { op, lhs, rhs } => {
+                let mut functions = IndexSet::new();
+                if matches!(
+                    op,
+                    BinaryOperator::Divide | BinaryOperator::Modulo | BinaryOperator::Interval
+                ) {
+                    functions.insert(*op);
+                }
+                functions.extend(lhs.indefinite_functions());
+                functions.extend(rhs.indefinite_functions());
+                functions
+            }
+        }
+    }
+
+    pub(crate) fn destructure_binary_operation(self) -> Option<(BinaryOperator, Term, Term)> {
+        match self {
+            Term::BinaryOperation { op, lhs, rhs } => Some((op, *lhs, *rhs)),
+            _ => None,
         }
     }
 }
@@ -289,6 +350,14 @@ impl Atom {
         }
         functions
     }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        let mut functions = IndexSet::new();
+        for term in self.terms.iter() {
+            functions.extend(term.indefinite_functions())
+        }
+        functions
+    }
 }
 
 impl TryFrom<mini_gringo_cl::Atom> for Atom {
@@ -346,6 +415,10 @@ impl Literal {
 
     pub fn function_constants(&self) -> IndexSet<String> {
         self.atom.function_constants()
+    }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        self.atom.indefinite_functions()
     }
 }
 
@@ -418,6 +491,28 @@ impl Comparison {
             _ => false,
         }
     }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        let mut functions = self.lhs.indefinite_functions();
+        functions.extend(self.rhs.indefinite_functions());
+        functions
+    }
+
+    pub(crate) fn indefinite_equality(self) -> bool {
+        if matches!(self.relation, Relation::Equal) && matches!(self.lhs, Term::Variable(_)) {
+            match self.rhs {
+                Term::BinaryOperation { op, .. } => {
+                    matches!(
+                        op,
+                        BinaryOperator::Divide | BinaryOperator::Modulo | BinaryOperator::Interval
+                    )
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
 }
 
 impl TryFrom<mini_gringo_cl::Comparison> for Comparison {
@@ -478,6 +573,13 @@ impl AtomicFormula {
         match &self {
             AtomicFormula::Literal(l) => l.atom.terms.iter().cloned().collect(),
             AtomicFormula::Comparison(c) => IndexSet::from([c.lhs.clone(), c.rhs.clone()]),
+        }
+    }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        match &self {
+            AtomicFormula::Literal(l) => l.indefinite_functions(),
+            AtomicFormula::Comparison(c) => c.indefinite_functions(),
         }
     }
 }
@@ -548,6 +650,13 @@ impl Head {
             Head::Falsity => IndexSet::new(),
         }
     }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        match &self {
+            Head::Basic(a) | Head::Choice(a) => a.indefinite_functions(),
+            Head::Falsity => IndexSet::new(),
+        }
+    }
 }
 
 impl TryFrom<mini_gringo_cl::Head> for Head {
@@ -615,6 +724,14 @@ impl Body {
             terms.extend(formula.terms())
         }
         terms
+    }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        let mut functions = IndexSet::new();
+        for formula in self.formulas.iter() {
+            functions.extend(formula.indefinite_functions())
+        }
+        functions
     }
 }
 
@@ -701,6 +818,12 @@ impl Rule {
         terms.extend(self.body.terms());
         terms
     }
+
+    fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        let mut functions = self.head.indefinite_functions();
+        functions.extend(self.body.indefinite_functions());
+        functions
+    }
 }
 
 impl TryFrom<mini_gringo_cl::Rule> for Rule {
@@ -765,6 +888,14 @@ impl Program {
             }
         }
         max_arity
+    }
+
+    pub fn indefinite_functions(&self) -> IndexSet<BinaryOperator> {
+        let mut functions = IndexSet::new();
+        for rule in self.rules.iter() {
+            functions.extend(rule.indefinite_functions());
+        }
+        functions
     }
 }
 

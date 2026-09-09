@@ -1,16 +1,21 @@
 use {
     crate::{
-        command_line::arguments::{Decomposition, Dialect},
+        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment},
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
         },
+        normalizing::asp::numeric_normal::numeric_normal_form,
         simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{GenericPredicate, asp::mini_gringo_cl as asp, fol::sigma_0 as fol},
+        syntax_tree::{
+            GenericPredicate,
+            asp::{Definite, mini_gringo, mini_gringo_cl as asp},
+            fol::sigma_0::{self as fol, AxiomatizedTheory, Theory},
+        },
         translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
-            formula_representation::tau_star::TauStar,
+            formula_representation::{numeric_natural::numeric_natural, tau_star::TauStar},
         },
         verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
@@ -72,6 +77,7 @@ pub enum StrongEquivalenceTaskError {
     PredicateInUserGuideAssumption(fol::AnnotatedFormula),
     ProofOutlineError(#[from] ProofOutlineError),
     ProofOutlineContainsDefinition(fol::AnnotatedFormula),
+    UnsupportedLanguageFragmentForFormulaRepresentation(Fragment, FormulaRepresentation),
 }
 
 impl From<Box<ProofOutlineError>> for StrongEquivalenceTaskError {
@@ -98,6 +104,15 @@ impl Display for StrongEquivalenceTaskError {
                     "strong equivalence proof outlines do not support definitions, e.g. {formula}"
                 )
             }
+            StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(
+                frag,
+                rep,
+            ) => {
+                writeln!(
+                    f,
+                    "the specified formula-representation {rep} does not support {frag} programs"
+                )
+            }
         }
     }
 }
@@ -107,6 +122,7 @@ pub struct StrongEquivalenceTask {
     pub right: asp::Program,
     pub user_guide: Option<fol::UserGuide>,
     pub proof_outline: fol::Specification,
+    pub representation: FormulaRepresentation,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
     pub program_dialect: Dialect,
@@ -172,16 +188,60 @@ impl Task for StrongEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         let mut warnings = self.ensure_absence_of_predicate_declarations()?.warnings;
 
-        let transition_axioms = self.transition_axioms(); // These are the "forall X (hp(X) -> tp(X))" axioms.
+        // These are axioms to which gamma should not be applied
+        let mut general_axioms = IndexSet::new();
 
-        let mut left = match self.spec_dialect {
-            Dialect::GringoFive => self.left.tau_star(Dialect::GringoFive),
-            Dialect::GringoSix => self.left.tau_star(Dialect::GringoSix),
+        // These are the "forall X (hp(X) -> tp(X))" axioms.
+        let transition_axioms = self.transition_axioms();
+
+        // Check if both programs are definite
+        let definite = { self.left.definite() && self.right.definite() };
+
+        let axiomatized_left = match self.representation {
+            FormulaRepresentation::Mu => todo!(),
+            FormulaRepresentation::TauStar => AxiomatizedTheory {
+                axioms: Theory {
+                    formulas: Vec::new(),
+                },
+                theory: self.left.tau_star(self.spec_dialect),
+            },
+            FormulaRepresentation::NumericNatural => {
+                match mini_gringo::Program::try_from(self.left) {
+                    Ok(program) => numeric_natural(numeric_normal_form(program), self.spec_dialect),
+                    Err(_) => return Err(StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(Fragment::MiniGringoCL, FormulaRepresentation::NumericNatural)),
+                }
+            }
         };
-        let mut right = match self.program_dialect {
-            Dialect::GringoFive => self.right.tau_star(Dialect::GringoFive),
-            Dialect::GringoSix => self.right.tau_star(Dialect::GringoSix),
+        for f in axiomatized_left.axioms.formulas {
+            general_axioms.insert(f);
+        }
+
+        let axiomatized_right = match self.representation {
+            FormulaRepresentation::Mu => todo!(),
+            FormulaRepresentation::TauStar => AxiomatizedTheory {
+                axioms: Theory {
+                    formulas: Vec::new(),
+                },
+                theory: self.right.tau_star(self.program_dialect),
+            },
+            FormulaRepresentation::NumericNatural => match mini_gringo::Program::try_from(
+                self.right,
+            ) {
+                Ok(program) => numeric_natural(numeric_normal_form(program), self.program_dialect),
+                Err(_) => return Err(
+                    StrongEquivalenceTaskError::UnsupportedLanguageFragmentForFormulaRepresentation(
+                        Fragment::MiniGringoCL,
+                        FormulaRepresentation::NumericNatural,
+                    ),
+                ),
+            },
         };
+        for f in axiomatized_right.axioms.formulas {
+            general_axioms.insert(f);
+        }
+
+        let mut left = axiomatized_left.theory;
+        let mut right = axiomatized_right.theory;
 
         let placeholders = match &self.user_guide {
             Some(ug) => ug
@@ -207,8 +267,11 @@ impl Task for StrongEquivalenceTask {
                 .collect();
         }
 
-        left = left.gamma();
-        right = right.gamma();
+        // gamma can be bypassed if programs are definite
+        if !definite {
+            left = left.gamma();
+            right = right.gamma();
+        }
 
         if self.simplify {
             let mut portfolio = [INTUITIONISTIC, HT, CLASSIC].concat().into_iter().compose();
@@ -274,7 +337,11 @@ impl Task for StrongEquivalenceTask {
             right,
             user_guide_assumptions,
             transition_axioms,
+            general_axioms: Theory {
+                formulas: Vec::from_iter(general_axioms),
+            },
             proof_outline,
+            definite,
             decomposition: self.decomposition,
             direction: self.direction,
         }
@@ -288,7 +355,9 @@ struct ValidatedStrongEquivalenceTask {
     pub right: fol::Theory,
     pub user_guide_assumptions: Vec<fol::AnnotatedFormula>,
     pub transition_axioms: fol::Theory,
+    pub general_axioms: fol::Theory,
     pub proof_outline: ProofOutline,
+    pub definite: bool,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
 }
@@ -304,7 +373,13 @@ impl Task for ValidatedStrongEquivalenceTask {
             .map(|a| a.into_problem_formula(problem::Role::Axiom))
             .collect();
 
-        let proof_outline = self.proof_outline.apply_gamma_reduction();
+        let (transition_axioms, proof_outline) = match self.definite {
+            true => (Theory { formulas: vec![] }, self.proof_outline),
+            false => (
+                self.transition_axioms,
+                self.proof_outline.apply_gamma_reduction(),
+            ),
+        };
 
         let mut problems = Vec::new();
         if matches!(
@@ -317,9 +392,14 @@ impl Task for ValidatedStrongEquivalenceTask {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
                         Problem::with_name(format!("forward_outline_{i}_{j}"))
-                            .add_theory(self.transition_axioms.clone(), |i, formula| {
+                            .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                                name: format!("transition_axiom_{i}"),
+                                role: Role::Axiom,
+                                formula,
+                            })
+                            .add_theory(self.general_axioms.clone(), |i, formula| {
                                 AnnotatedFormula {
-                                    name: format!("transition_axiom_{i}"),
+                                    name: format!("general_axiom_{i}"),
                                     role: Role::Axiom,
                                     formula,
                                 }
@@ -342,12 +422,15 @@ impl Task for ValidatedStrongEquivalenceTask {
             // Add the Forward problems to problem list
             problems.append(
                 &mut Problem::with_name("forward")
-                    .add_theory(self.transition_axioms.clone(), |i, formula| {
-                        AnnotatedFormula {
-                            name: format!("transition_axiom_{i}"),
-                            role: Role::Axiom,
-                            formula,
-                        }
+                    .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                        name: format!("transition_axiom_{i}"),
+                        role: Role::Axiom,
+                        formula,
+                    })
+                    .add_theory(self.general_axioms.clone(), |i, formula| AnnotatedFormula {
+                        name: format!("general_axiom_{i}"),
+                        role: Role::Axiom,
+                        formula,
                     })
                     .add_annotated_formulas(forward_axioms)
                     .add_theory(self.left.clone(), |i, formula| AnnotatedFormula {
@@ -375,9 +458,14 @@ impl Task for ValidatedStrongEquivalenceTask {
                 for (j, conjecture) in lemma.conjectures.iter().enumerate() {
                     problems.push(
                         Problem::with_name(format!("backward_outline_{i}_{j}"))
-                            .add_theory(self.transition_axioms.clone(), |i, formula| {
+                            .add_theory(transition_axioms.clone(), |i, formula| AnnotatedFormula {
+                                name: format!("transition_axiom_{i}"),
+                                role: Role::Axiom,
+                                formula,
+                            })
+                            .add_theory(self.general_axioms.clone(), |i, formula| {
                                 AnnotatedFormula {
-                                    name: format!("transition_axiom_{i}"),
+                                    name: format!("general_axiom_{i}"),
                                     role: Role::Axiom,
                                     formula,
                                 }
@@ -398,8 +486,13 @@ impl Task for ValidatedStrongEquivalenceTask {
 
             problems.append(
                 &mut Problem::with_name("backward")
-                    .add_theory(self.transition_axioms, |i, formula| AnnotatedFormula {
+                    .add_theory(transition_axioms, |i, formula| AnnotatedFormula {
                         name: format!("transition_axiom_{i}"),
+                        role: Role::Axiom,
+                        formula,
+                    })
+                    .add_theory(self.general_axioms, |i, formula| AnnotatedFormula {
+                        name: format!("general_axiom_{i}"),
                         role: Role::Axiom,
                         formula,
                     })

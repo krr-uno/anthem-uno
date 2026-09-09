@@ -60,12 +60,12 @@ pub enum Command {
         #[arg(long, value_enum)]
         strategy: SimplificationStrategy,
 
-        // Display formulas as LaTex
-        #[arg(long, action)]
-        display_latex: bool,
-
         /// The file to simplify
         input: Option<PathBuf>,
+
+        /// The format of the output
+        #[arg(long, value_enum, default_value_t)]
+        format: Format,
     },
 
     /// Translate a given answer set program or first-order theory
@@ -78,9 +78,9 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         dialect: Dialect,
 
-        // Display formulas as LaTex
-        #[arg(long, action)]
-        display_latex: bool,
+        /// The format of the output
+        #[arg(long, value_enum, default_value_t)]
+        format: Format,
 
         /// The file to translate
         input: Option<PathBuf>,
@@ -181,10 +181,27 @@ pub enum Command {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub(crate) enum Format {
+    #[default]
+    Default,
+    Tptp,
+    Latex,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Fragment {
     MiniGringo,
     #[default]
     MiniGringoCL,
+}
+
+impl std::fmt::Display for Fragment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Fragment::MiniGringo => write!(f, "mini-gringo"),
+            Fragment::MiniGringoCL => write!(f, "mini-gringo-cl"),
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -266,6 +283,7 @@ pub enum Translation {
     Gamma,
     Mu,
     Natural,
+    NumericNatural,
     TauStar,
 }
 
@@ -274,6 +292,17 @@ pub enum FormulaRepresentation {
     Mu,
     #[default]
     TauStar,
+    NumericNatural,
+}
+
+impl std::fmt::Display for FormulaRepresentation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FormulaRepresentation::Mu => write!(f, "mu"),
+            FormulaRepresentation::TauStar => write!(f, "tau-star"),
+            FormulaRepresentation::NumericNatural => write!(f, "numeric-natural"),
+        }
+    }
 }
 
 // TODO: In the future, there may be more options for reducing
