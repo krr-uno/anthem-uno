@@ -2,7 +2,7 @@ use {
     crate::{
         command_line::arguments::{Backend, InductionSchedule},
         verifying::{
-            problem::Problem,
+            problem::tptp::Problem,
             prover::{Prover, Report, Status, StatusExtractionError},
         },
     },

@@ -31,7 +31,7 @@ use {
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
-            problem::{self, Interpretation, Problem},
+            problem::tptp::{self, Interpretation, Problem},
             task::Task,
         },
     },
@@ -980,13 +980,13 @@ impl Task for ValidatedExternalEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         use crate::{
             syntax_tree::fol::sigma_0::{Direction::*, Role::*},
-            verifying::problem::Role::*,
+            verifying::problem::tptp,
         };
 
         let mut stable_premises: Vec<_> = self
             .user_guide_assumptions
             .into_iter()
-            .map(|a| a.into_problem_formula(problem::Role::Axiom))
+            .map(|a| a.into_problem_formula(tptp::Role::Axiom))
             .collect();
 
         let mut forward_premises = Vec::new();
@@ -999,23 +999,30 @@ impl Task for ValidatedExternalEquivalenceTask {
         for formula in self.left {
             match formula.role {
                 Assumption | Definition => match formula.direction {
-                    Universal => stable_premises.push(formula.into_problem_formula(Axiom)),
-                    Forward => forward_premises.push(formula.into_problem_formula(Axiom)),
+                    Universal => {
+                        stable_premises.push(formula.into_problem_formula(tptp::Role::Axiom))
+                    }
+                    Forward => {
+                        forward_premises.push(formula.into_problem_formula(tptp::Role::Axiom))
+                    }
                     Backward => warnings.push(
                         ExternalEquivalenceTaskWarning::InconsistentDirectionAnnotation(formula),
                     ),
                 },
                 Spec => {
                     if matches!(formula.direction, Universal | Forward) {
-                        forward_premises.push(formula.clone().into_problem_formula(Axiom))
+                        forward_premises
+                            .push(formula.clone().into_problem_formula(tptp::Role::Axiom))
                     }
                     if matches!(formula.direction, Universal | Backward) {
                         if self.break_equivalences {
                             for formula in break_equivalences_annotated_formula(formula) {
-                                backward_conclusions.push(formula.into_problem_formula(Conjecture))
+                                backward_conclusions
+                                    .push(formula.into_problem_formula(tptp::Role::Conjecture))
                             }
                         } else {
-                            backward_conclusions.push(formula.into_problem_formula(Conjecture))
+                            backward_conclusions
+                                .push(formula.into_problem_formula(tptp::Role::Conjecture))
                         }
                     }
                 }
@@ -1026,23 +1033,30 @@ impl Task for ValidatedExternalEquivalenceTask {
         for formula in self.right {
             match formula.role {
                 Assumption => match formula.direction {
-                    Universal => stable_premises.push(formula.into_problem_formula(Axiom)),
+                    Universal => {
+                        stable_premises.push(formula.into_problem_formula(tptp::Role::Axiom))
+                    }
                     Forward => warnings.push(
                         ExternalEquivalenceTaskWarning::InconsistentDirectionAnnotation(formula),
                     ),
-                    Backward => backward_premises.push(formula.into_problem_formula(Axiom)),
+                    Backward => {
+                        backward_premises.push(formula.into_problem_formula(tptp::Role::Axiom))
+                    }
                 },
                 Spec => {
                     if matches!(formula.direction, Universal | Backward) {
-                        backward_premises.push(formula.clone().into_problem_formula(Axiom))
+                        backward_premises
+                            .push(formula.clone().into_problem_formula(tptp::Role::Axiom))
                     }
                     if matches!(formula.direction, Universal | Forward) {
                         if self.break_equivalences {
                             for formula in break_equivalences_annotated_formula(formula) {
-                                forward_conclusions.push(formula.into_problem_formula(Conjecture))
+                                forward_conclusions
+                                    .push(formula.into_problem_formula(tptp::Role::Conjecture))
                             }
                         } else {
-                            forward_conclusions.push(formula.into_problem_formula(Conjecture))
+                            forward_conclusions
+                                .push(formula.into_problem_formula(tptp::Role::Conjecture))
                         }
                     }
                 }
@@ -1067,11 +1081,11 @@ impl Task for ValidatedExternalEquivalenceTask {
 }
 
 struct AssembledExternalEquivalenceTask {
-    pub stable_premises: Vec<problem::AnnotatedFormula>,
-    pub forward_premises: Vec<problem::AnnotatedFormula>,
-    pub forward_conclusions: Vec<problem::AnnotatedFormula>,
-    pub backward_premises: Vec<problem::AnnotatedFormula>,
-    pub backward_conclusions: Vec<problem::AnnotatedFormula>,
+    pub stable_premises: Vec<tptp::AnnotatedFormula>,
+    pub forward_premises: Vec<tptp::AnnotatedFormula>,
+    pub forward_conclusions: Vec<tptp::AnnotatedFormula>,
+    pub backward_premises: Vec<tptp::AnnotatedFormula>,
+    pub backward_conclusions: Vec<tptp::AnnotatedFormula>,
     pub proof_outline: ProofOutline,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
@@ -1095,7 +1109,7 @@ impl Task for AssembledExternalEquivalenceTask {
                 self.proof_outline
                     .forward_definitions
                     .into_iter()
-                    .map(|f| f.into_problem_formula(problem::Role::Axiom)),
+                    .map(|f| f.into_problem_formula(tptp::Role::Axiom)),
             );
 
             for (i, lemma) in self.proof_outline.forward_lemmas.iter().enumerate() {
@@ -1138,7 +1152,7 @@ impl Task for AssembledExternalEquivalenceTask {
                 self.proof_outline
                     .backward_definitions
                     .into_iter()
-                    .map(|f| f.into_problem_formula(problem::Role::Axiom)),
+                    .map(|f| f.into_problem_formula(tptp::Role::Axiom)),
             );
 
             for (i, lemma) in self.proof_outline.backward_lemmas.iter().enumerate() {

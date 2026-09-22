@@ -34,9 +34,9 @@ impl Gamma for GeneralLemma {
 }
 
 /// Gamma only modifies formulas which contain non-arithmetic predicates
-impl Gamma for problem::AnnotatedFormula {
+impl Gamma for problem::tptp::AnnotatedFormula {
     fn gamma(self) -> Self {
-        problem::AnnotatedFormula {
+        problem::tptp::AnnotatedFormula {
             name: self.name,
             role: self.role,
             formula: if self.formula.predicates().is_empty() {

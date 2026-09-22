@@ -22,7 +22,7 @@ use {
         },
         verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
-            problem::{self, AnnotatedFormula, Interpretation, Problem, Role},
+            problem::tptp::{AnnotatedFormula, Interpretation, Problem, Role},
             task::Task,
         },
     },
@@ -395,7 +395,7 @@ impl Task for ValidatedStrongEquivalenceTask {
         let stable_premises: Vec<_> = self
             .user_guide_assumptions
             .into_iter()
-            .map(|a| a.into_problem_formula(problem::Role::Axiom))
+            .map(|a| a.into_problem_formula(Role::Axiom))
             .collect();
 
         let (transition_axioms, proof_outline) = match self.definite {

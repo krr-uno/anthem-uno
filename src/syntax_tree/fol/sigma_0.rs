@@ -1400,8 +1400,11 @@ pub struct AnnotatedFormula {
 impl_node!(AnnotatedFormula, Format, AnnotatedFormulaParser);
 
 impl AnnotatedFormula {
-    pub fn into_problem_formula(self, role: problem::Role) -> problem::AnnotatedFormula {
-        problem::AnnotatedFormula {
+    pub fn into_problem_formula(
+        self,
+        role: problem::tptp::Role,
+    ) -> problem::tptp::AnnotatedFormula {
+        problem::tptp::AnnotatedFormula {
             // TODO: Revisit default naming scheme!
             name: self.name,
             role,
@@ -1739,13 +1742,13 @@ mod tests {
     #[test]
     fn test_formula_functions() {
         let formula: Formula = "forall V1 X (V1 = X and exists Z Z1 (exists X1 (X1 = X and Z = f$s(X1)) and exists X1 (X1 = a and Z1 = f$s(X1)) and Z = Z1) -> p(V1))".parse().unwrap();
-        let target = problem::Function {
+        let target = problem::tptp::Function {
             function_symbol: "f".to_string(),
             sort: Sort::Symbol,
             arity: 1,
         };
         for f in formula.functions() {
-            let src: problem::Function = f.into();
+            let src: problem::tptp::Function = f.into();
             assert_eq!(src, target)
         }
     }
