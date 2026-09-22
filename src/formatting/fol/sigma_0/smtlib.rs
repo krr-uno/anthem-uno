@@ -3,11 +3,11 @@ use {
         Node,
         fol::sigma_0::{
             Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula, Function,
-            FunctionConstant, GeneralTerm, IntegerTerm, Quantification, Quantifier, Relation, Sort,
-            SymbolicTerm, UnaryConnective, UnaryOperator, Variable,
+            FunctionConstant, GeneralTerm, IntegerTerm, Predicate, Quantification, Quantifier,
+            Relation, Sort, SymbolicTerm, UnaryConnective, UnaryOperator, Variable,
         },
     },
-    std::fmt::{self, Display, Formatter},
+    std::fmt::{self, Display, Formatter, write},
 };
 
 pub struct Format<'a, N: Node>(pub &'a N);
@@ -99,6 +99,19 @@ impl Display for Format<'_, GeneralTerm> {
             GeneralTerm::SymbolicTerm(t) => write!(f, "f__symbolic__({})", Format(t)),
             GeneralTerm::Function(func) => write!(f, "{}", Format(func)),
         }
+    }
+}
+
+impl Display for Format<'_, Predicate> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let symbol = &self.0.symbol;
+        write!(f, "{symbol} (")?;
+        for _i in 1..self.0.arity {
+            write!(f, " Int")?;
+        }
+        write!(f, ")")?;
+
+        Ok(())
     }
 }
 
@@ -206,9 +219,8 @@ impl Display for Format<'_, FunctionConstant> {
         let sort = &self.0.sort;
 
         match sort {
-            Sort::General => write!(f, "{name}_g"),
             Sort::Integer => write!(f, "{name}_i"),
-            Sort::Symbol => write!(f, "{name}_s"),
+            _ => panic!("only integer-sorted placeholders are currently supported"),
         }
     }
 }
