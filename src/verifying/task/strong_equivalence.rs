@@ -22,7 +22,10 @@ use {
         },
         verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
-            problem::tptp::{AnnotatedFormula, Interpretation, Problem, Role},
+            problem::{
+                Interpretation,
+                tptp::{AnnotatedFormula, Problem, Role},
+            },
             task::Task,
         },
     },

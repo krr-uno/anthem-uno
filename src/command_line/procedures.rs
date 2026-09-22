@@ -33,7 +33,7 @@ use {
             },
         },
         verifying::{
-            problem::tptp::Interpretation,
+            problem::Interpretation,
             prover::{Prover, Report, Status, Success, vampire::Vampire},
             task::{
                 Task, external_equivalence::ExternalEquivalenceTask,

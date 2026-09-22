@@ -2,9 +2,9 @@ use {
     crate::syntax_tree::{
         Node,
         fol::sigma_0::{
-            Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison,
-            Formula, Function, FunctionConstant, GeneralTerm, IntegerTerm, Quantification,
-            Quantifier, Relation, Sort, SymbolicTerm, UnaryConnective, UnaryOperator, Variable,
+            Atom, AtomicFormula, BinaryConnective, BinaryOperator, Comparison, Formula, Function,
+            FunctionConstant, GeneralTerm, IntegerTerm, Quantification, Quantifier, Relation, Sort,
+            SymbolicTerm, UnaryConnective, UnaryOperator, Variable,
         },
     },
     std::fmt::{self, Display, Formatter},

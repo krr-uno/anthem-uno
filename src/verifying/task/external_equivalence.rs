@@ -31,7 +31,10 @@ use {
             outline::{
                 CheckInternal, GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning,
             },
-            problem::tptp::{self, Interpretation, Problem},
+            problem::{
+                Interpretation,
+                tptp::{self, Problem},
+            },
             task::Task,
         },
     },
