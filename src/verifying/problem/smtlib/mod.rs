@@ -1,10 +1,9 @@
 use {
     super::{Function, Interpretation},
     crate::{
-        formatting::fol::sigma_0::{smtlib, tptp},
+        formatting::fol::sigma_0::smtlib,
         syntax_tree::fol::sigma_0::{
-            self as fol, Formula, FunctionConstant, GeneralTerm, Guard, Predicate, Quantification,
-            Quantifier, Sort, SymbolicTerm, Theory,
+            self as fol, Formula, FunctionConstant, Predicate, Theory,
         },
     },
     anyhow::{Context as _, Result},
@@ -69,7 +68,7 @@ impl fmt::Display for AnnotatedFormula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = &self.name;
         let role = &self.role;
-        let formula = crate::formatting::fol::sigma_0::tptp::Format(&self.formula);
+        let formula = crate::formatting::fol::sigma_0::smtlib::Format(&self.formula);
         writeln!(f, "({role} ({formula} :named {name}))")
     }
 }
@@ -210,12 +209,12 @@ impl fmt::Display for Problem {
 
         // Declare predicates
         for predicate in self.predicates().iter() {
-            write!(f, "(declare-fun {} Bool)", smtlib::Format(predicate))?;
+            writeln!(f, "(declare-fun {} Bool)", smtlib::Format(predicate))?;
         }
 
         // Declare functions
         for function in self.function_constants().iter() {
-            write!(f, "(declare-fun {} () Int)", smtlib::Format(function))?;
+            writeln!(f, "(declare-fun {} () Int)", smtlib::Format(function))?;
         }
         for function in self.functions().iter() {
             let symbol = &function.function_symbol;
@@ -223,18 +222,18 @@ impl fmt::Display for Problem {
             for _i in 1..function.arity {
                 write!(f, " Int")?;
             }
-            write!(f, " Int)")?;
+            write!(f, " Int)\n")?;
         }
 
         // Write assertions
         for formula in self.formulas.iter() {
-            write!(f, "{formula}")?;
+            writeln!(f, "{formula}")?;
         }
 
         // Set filename
-        write!(f, "(set-info :filename {})", self.name)?;
+        writeln!(f, "(set-info :filename {})", self.name)?;
 
-        write!(f, "(check-sat)")?;
+        writeln!(f, "(check-sat)")?;
 
         Ok(())
     }

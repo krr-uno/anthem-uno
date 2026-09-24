@@ -376,6 +376,7 @@ pub fn main() -> Result<()> {
             backend,
             program_dialect,
             spec_dialect,
+            with_countermodel,
         } => {
             let start_time = Instant::now();
 
@@ -470,6 +471,13 @@ pub fn main() -> Result<()> {
                     path.push(format!("{}.p", problem.name));
                     let mut problem = problem.clone();
                     problem.preamble = Some(PathBuf::from("standard_preamble.p"));
+                    problem.to_file(path)?;
+                }
+
+                for problem in task_problems.countermodel_problems {
+                    let mut path = out_dir.clone();
+                    path.push(format!("{}.smt2", problem.name));
+                    let mut problem = problem.clone();
                     problem.to_file(path)?;
                 }
             }

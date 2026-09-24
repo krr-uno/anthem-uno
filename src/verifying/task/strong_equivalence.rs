@@ -1,26 +1,17 @@
 use {
     crate::{
-        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment},
-        convenience::{
+        command_line::arguments::{Decomposition, Dialect, FormulaRepresentation, Fragment}, convenience::{
             apply::Apply as _,
             compose::Compose as _,
             with_warnings::{Result, WithWarnings},
-        },
-        normalizing::asp::numeric_normal::numeric_normal_form,
-        simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{
-            GenericPredicate,
-            asp::{Definite, mini_gringo, mini_gringo_cl as asp},
-            fol::{
-                IntegerConversion,
-                sigma_0::{self as fol, AxiomatizedTheory, Theory},
+        }, normalizing::asp::numeric_normal::numeric_normal_form, simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC}, syntax_tree::{
+            GenericPredicate, asp::{Definite, mini_gringo, mini_gringo_cl as asp}, fol::{
+                IntegerConversion, sigma_0::{self as fol, AxiomatizedTheory, Formula, Theory},
             },
-        },
-        translating::{
+        }, translating::{
             classical_reduction::gamma::{Gamma as _, Here as _, There as _},
             formula_representation::{numeric_natural::numeric_natural, tau_star::TauStar},
-        },
-        verifying::{
+        }, verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
             problem::{
                 Interpretation, smtlib,
@@ -28,10 +19,7 @@ use {
             },
             task::{CounterModelTask, ProofSearchTask, Task, TaskProblems},
         },
-    },
-    indexmap::{IndexMap, IndexSet},
-    std::fmt::Display,
-    thiserror::Error,
+    }, indexmap::{IndexMap, IndexSet}, std::fmt::Display, thiserror::Error,
 };
 
 #[allow(clippy::result_large_err)]
@@ -605,6 +593,45 @@ impl CounterModelTask for StrongCounterModelTask {
     type Warning = StrongCounterModelTaskWarning;
 
     fn decompose(self) -> Result<Vec<smtlib::Problem>, Self::Warning, Self::Error> {
-        todo!()
+        let transition_axioms = match self.definite {
+            true => Theory { formulas: vec![] },
+            false => self.transition_axioms,
+        };
+
+        // not (lhs <=> rhs)
+        let lhs = Box::new(Formula::conjoin(self.left.formulas));
+        let rhs = Box::new(Formula::conjoin(self.right.formulas));
+        let consequent = Formula::UnaryFormula {
+            connective: fol::UnaryConnective::Negation,
+            formula: Formula::BinaryFormula {
+                connective: fol::BinaryConnective::Equivalence,
+                lhs,
+                rhs
+            }.into(),
+        };
+
+        let problem = smtlib::Problem::with_name("countermodel", smtlib::Logic::Ufnia)
+        .add_theory(transition_axioms, |i, formula| smtlib::AnnotatedFormula {
+            name: format!("transition_axiom_{i}"),
+            role: smtlib::Role::Assertion,
+            formula
+        })
+        .add_theory(self.general_axioms, |i, formula| smtlib::AnnotatedFormula {
+            name: format!("general_axiom_{i}"),
+            role: smtlib::Role::Assertion,
+            formula
+        })
+        .add_annotated_formulas(self.user_guide_assumptions.into_iter().map(|anf| smtlib::AnnotatedFormula {
+            name: anf.name,
+            role: smtlib::Role::Assertion,
+            formula: anf.formula
+        }))
+        .add_annotated_formulas(vec![consequent].into_iter().map(|formula| smtlib::AnnotatedFormula {
+            name: "consequent".to_string(),
+            role: smtlib::Role::Assertion,
+            formula
+        }));
+
+        Ok(WithWarnings::flawless(vec![problem]))
     }
 }
