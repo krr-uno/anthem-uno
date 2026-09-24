@@ -35,7 +35,7 @@ use {
                 Interpretation,
                 tptp::{self, Problem},
             },
-            task::Task,
+            task::{ProofSearchTask, Task, TaskProblems},
         },
     },
     either::Either,
@@ -682,7 +682,7 @@ impl Task for ExternalEquivalenceTask {
     type Error = ExternalEquivalenceTaskError;
     type Warning = ExternalEquivalenceTaskWarning;
 
-    fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
+    fn decompose(self) -> Result<TaskProblems, Self::Warning, Self::Error> {
         let mut interpretation = Interpretation::Standard;
         if self.int_only {
             interpretation = Interpretation::Integer;
@@ -950,7 +950,7 @@ impl Task for ExternalEquivalenceTask {
             user_guide_assumptions = user_guide_assumptions.convert_to_integer_domain()?;
         }
 
-        Ok(ValidatedExternalEquivalenceTask {
+        let proof_task = ValidatedExternalEquivalenceTask {
             left,
             right,
             user_guide_assumptions,
@@ -961,7 +961,17 @@ impl Task for ExternalEquivalenceTask {
             interpretation,
         }
         .decompose()?
-        .preface_warnings(warnings))
+        .preface_warnings(warnings);
+
+        let task = WithWarnings {
+            data: TaskProblems {
+                proof_problems: proof_task.data,
+                countermodel_problems: todo!(),
+            },
+            warnings: proof_task.warnings,
+        };
+
+        Ok(task)
     }
 }
 
@@ -976,7 +986,7 @@ struct ValidatedExternalEquivalenceTask {
     pub interpretation: Interpretation,
 }
 
-impl Task for ValidatedExternalEquivalenceTask {
+impl ProofSearchTask for ValidatedExternalEquivalenceTask {
     type Error = ExternalEquivalenceTaskError;
     type Warning = ExternalEquivalenceTaskWarning;
 
@@ -1095,7 +1105,7 @@ struct AssembledExternalEquivalenceTask {
     pub interpretation: Interpretation,
 }
 
-impl Task for AssembledExternalEquivalenceTask {
+impl ProofSearchTask for AssembledExternalEquivalenceTask {
     type Error = ExternalEquivalenceTaskError;
     type Warning = ExternalEquivalenceTaskWarning;
 

@@ -23,10 +23,10 @@ use {
         verifying::{
             outline::{ProofOutline, ProofOutlineError, ProofOutlineWarning},
             problem::{
-                Interpretation,
+                Interpretation, smtlib,
                 tptp::{AnnotatedFormula, Problem, Role},
             },
-            task::Task,
+            task::{CounterModelTask, ProofSearchTask, Task, TaskProblems},
         },
     },
     indexmap::{IndexMap, IndexSet},
@@ -56,6 +56,7 @@ pub enum StrongEquivalenceTaskWarning {
     InvalidRoleWithinUserGuide(fol::AnnotatedFormula),
     UserGuideContainsPredicateDeclarations(fol::Predicate),
     DefinitionWithWarning(#[from] ProofOutlineWarning),
+    CountermodelWarning(#[from] StrongCounterModelTaskWarning),
 }
 
 impl Display for StrongEquivalenceTaskWarning {
@@ -74,6 +75,9 @@ impl Display for StrongEquivalenceTaskWarning {
             StrongEquivalenceTaskWarning::DefinitionWithWarning(warning) => {
                 writeln!(f, "{warning}")
             }
+            StrongEquivalenceTaskWarning::CountermodelWarning(warning) => {
+                writeln!(f, "{warning}")
+            }
         }
     }
 }
@@ -85,6 +89,7 @@ pub enum StrongEquivalenceTaskError {
     ProofOutlineContainsDefinition(fol::AnnotatedFormula),
     UnsupportedLanguageFragmentForFormulaRepresentation(Fragment, FormulaRepresentation),
     FailedIntegerConversion(#[from] anyhow::Error),
+    CountermodelError(#[from] StrongCounterModelTaskError),
 }
 
 impl From<Box<ProofOutlineError>> for StrongEquivalenceTaskError {
@@ -122,6 +127,12 @@ impl Display for StrongEquivalenceTaskError {
             }
             StrongEquivalenceTaskError::FailedIntegerConversion(error) => {
                 writeln!(f, "conversion to integer-only failed: {error}")
+            }
+            StrongEquivalenceTaskError::CountermodelError(error) => {
+                writeln!(
+                    f,
+                    "failed to construct countermodel task due to error: {error}"
+                )
             }
         }
     }
@@ -196,7 +207,7 @@ impl Task for StrongEquivalenceTask {
     type Error = StrongEquivalenceTaskError;
     type Warning = StrongEquivalenceTaskWarning;
 
-    fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
+    fn decompose(self) -> Result<TaskProblems, Self::Warning, Self::Error> {
         let mut warnings = self.ensure_absence_of_predicate_declarations()?.warnings;
 
         let mut interpretation = Interpretation::Standard;
@@ -360,7 +371,24 @@ impl Task for StrongEquivalenceTask {
             general_axioms = general_axioms.convert_to_integer_domain()?;
         }
 
-        Ok(ValidatedStrongEquivalenceTask {
+        let countermodel_task = StrongCounterModelTask {
+            left: left.clone(),
+            right: right.clone(),
+            user_guide_assumptions: user_guide_assumptions.clone(),
+            transition_axioms: transition_axioms.clone(),
+            general_axioms: general_axioms.clone(),
+            definite,
+        }
+        .decompose()?;
+
+        warnings.extend(
+            countermodel_task
+                .warnings
+                .into_iter()
+                .map(StrongEquivalenceTaskWarning::from),
+        );
+
+        let proof_task = ValidatedStrongEquivalenceTask {
             left,
             right,
             user_guide_assumptions,
@@ -373,7 +401,17 @@ impl Task for StrongEquivalenceTask {
             interpretation,
         }
         .decompose()?
-        .preface_warnings(warnings))
+        .preface_warnings(warnings);
+
+        let task = WithWarnings {
+            data: TaskProblems {
+                proof_problems: proof_task.data,
+                countermodel_problems: countermodel_task.data,
+            },
+            warnings: proof_task.warnings,
+        };
+
+        Ok(task)
     }
 }
 
@@ -390,7 +428,7 @@ struct ValidatedStrongEquivalenceTask {
     pub interpretation: Interpretation,
 }
 
-impl Task for ValidatedStrongEquivalenceTask {
+impl ProofSearchTask for ValidatedStrongEquivalenceTask {
     type Error = StrongEquivalenceTaskError;
     type Warning = StrongEquivalenceTaskWarning;
 
@@ -543,5 +581,30 @@ impl Task for ValidatedStrongEquivalenceTask {
         }
 
         Ok(WithWarnings::flawless(problems))
+    }
+}
+
+pub struct StrongCounterModelTask {
+    pub left: fol::Theory,
+    pub right: fol::Theory,
+    pub user_guide_assumptions: Vec<fol::AnnotatedFormula>,
+    pub transition_axioms: fol::Theory,
+    pub general_axioms: fol::Theory,
+    pub definite: bool,
+}
+
+#[derive(Error, Debug)]
+pub enum StrongCounterModelTaskWarning {}
+
+#[derive(Error, Debug)]
+pub enum StrongCounterModelTaskError {}
+
+impl CounterModelTask for StrongCounterModelTask {
+    type Error = StrongCounterModelTaskError;
+
+    type Warning = StrongCounterModelTaskWarning;
+
+    fn decompose(self) -> Result<Vec<smtlib::Problem>, Self::Warning, Self::Error> {
+        todo!()
     }
 }

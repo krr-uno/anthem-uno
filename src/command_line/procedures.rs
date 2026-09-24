@@ -382,7 +382,7 @@ pub fn main() -> Result<()> {
             let files =
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
-            let problems = match equivalence {
+            let task_problems = match equivalence {
                 Equivalence::Strong => {
                     let user_guide = match files.user_guide() {
                         Some(path) => Some(fol::UserGuide::from_file(path)?),
@@ -455,6 +455,8 @@ pub fn main() -> Result<()> {
                 .decompose()?
                 .report_warnings(),
             };
+
+            let problems = task_problems.proof_problems;
 
             if let Some(out_dir) = out_dir {
                 // TODO: match on Interpretation

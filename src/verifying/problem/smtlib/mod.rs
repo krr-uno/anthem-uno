@@ -10,7 +10,7 @@ use {
     anyhow::{Context as _, Result},
     indexmap::IndexSet,
     itertools::Itertools,
-    std::{fmt, fs::File, path::Path, io::Write as _},
+    std::{fmt, fs::File, io::Write as _, path::Path},
 };
 
 //
