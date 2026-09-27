@@ -33,8 +33,9 @@ use {
             },
         },
         verifying::{
+            model_builder::{ModelBuilder, Report as CmReport, cvc5::Cvc5},
             problem::Interpretation,
-            prover::{Prover, Report, Status, Success, vampire::Vampire},
+            prover::{Prover, Report as AtpReport, Status, Success, vampire::Vampire},
             task::{
                 Task, external_equivalence::ExternalEquivalenceTask,
                 strong_equivalence::StrongEquivalenceTask,
@@ -50,7 +51,7 @@ use {
         fs::{self, File},
         io::{self, Write, stdin},
         path::{Path, PathBuf},
-        process,
+        process, thread,
         time::Instant,
     },
 };
@@ -474,11 +475,14 @@ pub fn main() -> Result<()> {
                     problem.to_file(path)?;
                 }
 
-                for problem in task_problems.countermodel_problems {
-                    let mut path = out_dir.clone();
-                    path.push(format!("{}.smt2", problem.name));
-                    let mut problem = problem.clone();
-                    problem.to_file(path)?;
+                if with_countermodel {
+                    let countermodel_problems = task_problems.countermodel_problems.clone();
+                    for problem in countermodel_problems {
+                        let mut path = out_dir.clone();
+                        path.push(format!("{}.smt2", problem.name));
+                        let problem = problem.clone();
+                        problem.to_file(path)?;
+                    }
                 }
             }
 
@@ -505,7 +509,46 @@ pub fn main() -> Result<()> {
                     println!();
                 });
 
-                let mut success = true;
+                let mut handle = None;
+                if with_countermodel {
+                    let builder = Cvc5 {
+                        time_limit,
+                        //cores: 1,
+                    };
+
+                    // TODO: an "unsat" status indicates the ATP problem is valid?
+                    // Run countermodel building in parallel to proof search
+                    // Returns Some(model) if a countermodel is found
+                    let thread_handle = thread::spawn(move || {
+                        let mut message = String::new();
+                        let mut model = None;
+                        for problem in task_problems.countermodel_problems {
+                            match builder.build(problem) {
+                                Ok(report) => match report.model() {
+                                    Ok(result) => match result {
+                                        Some(m) => {
+                                            message = report.status().unwrap().to_string();
+                                            model = Some(m);
+                                        }
+                                        None => {
+                                            message = "missing model".to_string();
+                                        }
+                                    },
+                                    Err(err) => {
+                                        message = err.to_string();
+                                    }
+                                },
+                                Err(err) => {
+                                    message = err.to_string();
+                                }
+                            }
+                        }
+                        (message, model)
+                    });
+                    handle = Some(thread_handle);
+                }
+
+                let mut prover_success = true;
                 for result in prover.prove_all(problems) {
                     match result {
                         Ok(report) => match report.status() {
@@ -520,7 +563,7 @@ pub fn main() -> Result<()> {
                                 }
                                 println!();
                                 if !matches!(status, Status::Success(Success::Theorem)) {
-                                    success = false;
+                                    prover_success = false;
                                 }
                             }
                             Err(error) => {
@@ -533,22 +576,43 @@ pub fn main() -> Result<()> {
                                 println!("Output/stderr:");
                                 println!("{}", report.output.stderr);
                                 println!("Error: {error}");
-                                success = false;
+                                prover_success = false;
                             }
                         },
                         Err(error) => {
                             println!("> Proving <a problem> ended with an error"); // TODO: Get the name of the problem
                             println!("Error: {error}");
-                            success = false;
+                            prover_success = false;
                         }
                     }
                     println!();
                 }
 
-                if success {
+                // Wait for CM building to finish
+                let mut countermodel_found = false;
+                if with_countermodel {
+                    match handle.take().unwrap().join() {
+                        Ok((message, model_result)) => match model_result {
+                            Some(model) => {
+                                countermodel_found = true;
+                                println!("{model}");
+                            }
+                            None => println!("{message}"),
+                        },
+                        Err(err) => println!("{:?}", err),
+                    }
+                }
+
+                if prover_success && !countermodel_found {
                     print!("> Success! Anthem found a proof of the theorem.")
+                } else if !prover_success && countermodel_found {
+                    print!("> Failure! Anthem found the preceding counterexample.");
+                } else if prover_success && countermodel_found {
+                    print!("> This is a bug! Anthem found a proof and a counterexample.");
                 } else {
-                    print!("> Failure! Anthem was unable to find a proof of the theorem.")
+                    print!(
+                        "> Failure (Unknown)! Anthem was unable to find either a proof or disproof of the theorem."
+                    )
                 }
 
                 if !no_timing {

@@ -1219,6 +1219,17 @@ impl Formula {
             x => x,
         })
     }
+
+    pub(crate) fn quantifier_free(&self) -> bool {
+        match self {
+            Formula::AtomicFormula(_) => true,
+            Formula::UnaryFormula { formula, .. } => formula.quantifier_free(),
+            Formula::BinaryFormula { lhs, rhs, .. } => {
+                lhs.quantifier_free() && rhs.quantifier_free()
+            }
+            Formula::QuantifiedFormula { .. } => false,
+        }
+    }
 }
 
 impl IntegerConversion for Formula {

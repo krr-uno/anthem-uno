@@ -966,7 +966,7 @@ impl Task for ExternalEquivalenceTask {
         let task = WithWarnings {
             data: TaskProblems {
                 proof_problems: proof_task.data,
-                countermodel_problems: todo!(),
+                countermodel_problems: vec![],
             },
             warnings: proof_task.warnings,
         };

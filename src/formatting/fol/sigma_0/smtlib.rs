@@ -7,7 +7,7 @@ use {
             Relation, Sort, SymbolicTerm, UnaryConnective, UnaryOperator, Variable,
         },
     },
-    std::fmt::{self, Display, Formatter, write},
+    std::fmt::{self, Display, Formatter},
 };
 
 pub struct Format<'a, N: Node>(pub &'a N);
@@ -105,11 +105,12 @@ impl Display for Format<'_, GeneralTerm> {
 impl Display for Format<'_, Predicate> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let symbol = &self.0.symbol;
-        write!(f, "{symbol} (")?;
+        let arity = &self.0.arity;
+        write!(f, "{symbol}_{arity} (")?;
         for _i in 1..self.0.arity {
             write!(f, " Int")?;
         }
-        write!(f, ")")?;
+        write!(f, " )")?;
 
         Ok(())
     }
@@ -120,11 +121,12 @@ impl Display for Format<'_, Atom> {
         let predicate = &self.0.predicate_symbol;
         let terms = &self.0.terms;
         let sorts = &self.0.argument_sorts;
+        let arity = terms.len();
 
         if !terms.is_empty() {
             write!(f, "(")?;
         }
-        write!(f, "{predicate}")?;
+        write!(f, "{predicate}_{arity}")?;
 
         if !terms.is_empty() {
             let iter = terms.iter().zip(sorts).map(|(term, sort)| {
@@ -362,8 +364,8 @@ mod tests {
         for (src, target) in [
             ("#true", "true"),
             ("#false", "false"),
-            ("p", "p"),
-            ("p(1,2,3)", "(p 1 2 3)"),
+            ("p", "p_0"),
+            ("p(1,2,3)", "(p_3 1 2 3)"),
             ("1 < 2", "(< 1 2)"),
             ("1 <= 2", "(<= 1 2)"),
             ("1 >= 2", "(>= 1 2)"),
@@ -383,14 +385,14 @@ mod tests {
     #[test]
     fn format_formula() {
         for (src, target) in [
-            ("not p", "(not p)"),
-            ("p and q", "(and p q)"),
-            ("p -> q", "(=> p q)"),
-            ("p or q", "(or p q)"),
+            ("not p", "(not p_0)"),
+            ("p and q", "(and p_0 q_0)"),
+            ("p -> q", "(=> p_0 q_0)"),
+            ("p or q", "(or p_0 q_0)"),
             ("forall X$i (X$i < 5)", "(forall ( (N_i Int) ) (< N_i 5))"),
             (
                 "exists X$i Y$i (X$i < 5 and p(Y$i))",
-                "(exists ( (N_i Int) (N1_i Int) ) (and (< N_i 5) (p N1_i)))",
+                "(exists ( (N_i Int) (N1_i Int) ) (and (< N_i 5) (p_1 N1_i)))",
             ),
         ] {
             let f: Formula = src.parse().unwrap();

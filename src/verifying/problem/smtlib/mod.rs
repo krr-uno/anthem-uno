@@ -2,13 +2,10 @@ use {
     super::{Function, Interpretation},
     crate::{
         formatting::fol::sigma_0::smtlib,
-        syntax_tree::fol::sigma_0::{
-            self as fol, Formula, FunctionConstant, Predicate, Theory,
-        },
+        syntax_tree::fol::sigma_0::{self as fol, Formula, FunctionConstant, Predicate, Theory},
     },
     anyhow::{Context as _, Result},
     indexmap::IndexSet,
-    itertools::Itertools,
     std::{fmt, fs::File, io::Write as _, path::Path},
 };
 
@@ -16,6 +13,7 @@ use {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Logic {
     Ufnia,
+    Qfnia,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -43,9 +41,9 @@ impl AnnotatedFormula {
         self.formula.predicates()
     }
 
-    pub fn symbols(&self) -> IndexSet<String> {
-        self.formula.symbols()
-    }
+    // pub fn symbols(&self) -> IndexSet<String> {
+    //     self.formula.symbols()
+    // }
 
     pub fn function_constants(&self) -> IndexSet<FunctionConstant> {
         self.formula.function_constants()
@@ -55,21 +53,25 @@ impl AnnotatedFormula {
         self.formula.functions()
     }
 
-    pub fn rename_conflicting_symbols(self, possible_conflicts: &IndexSet<Predicate>) -> Self {
-        AnnotatedFormula {
-            role: self.role,
-            formula: self.formula.rename_conflicting_symbols(possible_conflicts),
-            name: self.name,
-        }
+    // pub fn rename_conflicting_symbols(self, possible_conflicts: &IndexSet<Predicate>) -> Self {
+    //     AnnotatedFormula {
+    //         role: self.role,
+    //         formula: self.formula.rename_conflicting_symbols(possible_conflicts),
+    //         name: self.name,
+    //     }
+    // }
+
+    fn quantifier_free(&self) -> bool {
+        self.formula.quantifier_free()
     }
 }
 
 impl fmt::Display for AnnotatedFormula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = &self.name;
         let role = &self.role;
         let formula = crate::formatting::fol::sigma_0::smtlib::Format(&self.formula);
-        writeln!(f, "({role} ({formula} :named {name}))")
+        writeln!(f, "({role} {formula})")
+        //writeln!(f, "({role} ({formula} :named {name}))")
     }
 }
 
@@ -82,13 +84,31 @@ pub struct Problem {
 }
 
 impl Problem {
-    pub fn with_name<S: Into<String>>(name: S, logic: Logic) -> Problem {
+    pub fn with_name<S: Into<String>>(name: S) -> Problem {
         Problem {
             name: name.into(),
             interpretation: Interpretation::Integer,
             formulas: vec![],
-            logic,
+            logic: Logic::Ufnia, // Default to most general logic
         }
+    }
+
+    // Change to a simpler logic, if possible
+    // TODO: simpler logic in absence of placeholders?
+    pub fn update_logic(mut self) -> Self {
+        let mut quantifier_free = true;
+        for f in self.formulas.iter() {
+            if !f.quantifier_free() {
+                quantifier_free = false;
+                break;
+            }
+        }
+        let logic = match quantifier_free {
+            true => Logic::Qfnia,
+            false => Logic::Ufnia,
+        };
+        self.logic = logic;
+        self
     }
 
     pub fn add_annotated_formulas(
@@ -125,40 +145,18 @@ impl Problem {
         self
     }
 
-    pub fn rename_conflicting_symbols(mut self) -> Self {
-        let propositional_predicates =
-            IndexSet::from_iter(self.predicates().into_iter().filter(|p| p.arity == 0));
+    // pub fn rename_conflicting_symbols(mut self) -> Self {
+    //     let propositional_predicates =
+    //         IndexSet::from_iter(self.predicates().into_iter().filter(|p| p.arity == 0));
 
-        let formulas = self
-            .formulas
-            .into_iter()
-            .map(|f| f.rename_conflicting_symbols(&propositional_predicates))
-            .collect();
-        self.formulas = formulas;
-        self
-    }
-
-    // TODO: Improve naming scheme for formulas
-    pub fn create_unique_formula_names(mut self) -> Self {
-        let mut formulas = vec![];
-        for (i, f) in self.formulas.into_iter().enumerate() {
-            formulas.push(AnnotatedFormula {
-                name: format!("formula_{i}_{}", f.name),
-                role: f.role,
-                formula: f.formula,
-            });
-        }
-        self.formulas = formulas;
-        self
-    }
-
-    pub fn assertions(&self) -> Vec<AnnotatedFormula> {
-        self.formulas
-            .iter()
-            .filter(|f| f.role == Role::Assertion)
-            .cloned()
-            .collect_vec()
-    }
+    //     let formulas = self
+    //         .formulas
+    //         .into_iter()
+    //         .map(|f| f.rename_conflicting_symbols(&propositional_predicates))
+    //         .collect();
+    //     self.formulas = formulas;
+    //     self
+    // }
 
     pub fn predicates(&self) -> IndexSet<Predicate> {
         let mut result = IndexSet::new();
@@ -168,13 +166,13 @@ impl Problem {
         result
     }
 
-    pub fn symbols(&self) -> IndexSet<String> {
-        let mut result = IndexSet::new();
-        for formula in &self.formulas {
-            result.extend(formula.symbols())
-        }
-        result
-    }
+    // pub fn symbols(&self) -> IndexSet<String> {
+    //     let mut result = IndexSet::new();
+    //     for formula in &self.formulas {
+    //         result.extend(formula.symbols())
+    //     }
+    //     result
+    // }
 
     pub fn function_constants(&self) -> IndexSet<FunctionConstant> {
         let mut result = IndexSet::new();
@@ -202,9 +200,13 @@ impl Problem {
 
 impl fmt::Display for Problem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Set options
+        writeln!(f, "(set-option :produce-models true)")?;
+
         // Set logic
         match self.logic {
-            Logic::Ufnia => write!(f, "(set-logic UF_NIA)")?,
+            Logic::Ufnia => writeln!(f, "(set-logic UF_NIA)")?,
+            Logic::Qfnia => writeln!(f, "(set-logic QF_NIA)")?,
         }
 
         // Declare predicates
@@ -222,7 +224,7 @@ impl fmt::Display for Problem {
             for _i in 1..function.arity {
                 write!(f, " Int")?;
             }
-            write!(f, " Int)\n")?;
+            writeln!(f, " Int)")?;
         }
 
         // Write assertions
@@ -233,7 +235,14 @@ impl fmt::Display for Problem {
         // Set filename
         writeln!(f, "(set-info :filename {})", self.name)?;
 
+        // Check satisfiability and get model
         writeln!(f, "(check-sat)")?;
+        for p in self.predicates().iter() {
+            let symbol = &p.symbol;
+            let arity = p.arity;
+            writeln!(f, "(get-value ({symbol}_{arity}))")?;
+        }
+        // TODO: get-value for placeholders
 
         Ok(())
     }
