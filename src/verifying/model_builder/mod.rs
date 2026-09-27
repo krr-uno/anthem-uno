@@ -82,18 +82,6 @@ impl FromStr for Status {
                     x => Err(StatusExtractionError::Unknown(x.to_string())),
                 }
             }
-            // Some(line) => {
-            //     let (_l, [status, _problem]) = STATUS
-            //         .captures(line)
-            //         .ok_or(StatusExtractionError::Missing)?
-            //         .extract();
-            //     match status {
-            //         "sat" => Ok(Self::Success(Success::Satisfiable)),
-            //         "unsat" => Ok(Self::Failure(Failure::Unsatisfiable)),
-            //         "unknown" => Ok(Self::Failure(Failure::Unknown)),
-            //         x => Err(StatusExtractionError::Unknown(x.to_string())),
-            //     }
-            // }
             None => Err(StatusExtractionError::Missing),
         }
     }
@@ -117,9 +105,11 @@ pub struct Model {
 
 impl Display for Model {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "--- countermodel ---")?;
         for assignment in self.assignments.iter() {
-            writeln!(f, "{assignment}")?;
+            write!(f, "{assignment}")?;
         }
+        writeln!(f, "--- ------------ ---")?;
         Ok(())
     }
 }
