@@ -120,6 +120,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         induction: InductionSchedule,
 
+        /// Run countermodel generation with the specified model builder
+        #[arg(long, value_enum, default_value_t)]
+        countermodel: ModelBuilder,
+
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
         bypass_tightness: bool,
@@ -139,10 +143,6 @@ pub enum Command {
         /// Omit display of system runtimes
         #[arg(long, action)]
         no_timing: bool,
-
-        /// Run countermodel generation
-        #[arg(long, action)]
-        with_countermodel: bool,
 
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
@@ -186,6 +186,14 @@ pub enum Command {
         /// The file to visualize
         input: Option<PathBuf>,
     },
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub(crate) enum ModelBuilder {
+    #[default]
+    None,
+    Cvc5,
+    Fest,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

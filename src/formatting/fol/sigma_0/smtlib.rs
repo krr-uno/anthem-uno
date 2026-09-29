@@ -105,9 +105,9 @@ impl Display for Format<'_, GeneralTerm> {
 impl Display for Format<'_, Predicate> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let symbol = &self.0.symbol;
-        let arity = &self.0.arity;
+        let arity = self.0.arity;
         write!(f, "{symbol}_{arity} (")?;
-        for _i in 1..self.0.arity {
+        for _i in 0..arity {
             write!(f, " Int")?;
         }
         write!(f, " )")?;

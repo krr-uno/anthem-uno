@@ -3,51 +3,31 @@ use {
         analyzing::{
             backwards_compatibility::BackwardsCompatibility, regularity::Regularity as _,
             tightness::Tightness,
-        },
-        command_line::{
-            Program,
-            arguments::{
-                Arguments, Command, Dialect, Equivalence, Format, Fragment, Normalization, Output,
-                ParseAs, Property, SimplificationPortfolio, SimplificationStrategy, Translation,
-                Visualization,
-            },
-            files::Files,
-        },
-        convenience::{
+        }, command_line::{
+            Program, arguments::{
+                self,
+                Arguments, Command, Dialect, Equivalence, Format, Fragment, Normalization, Output, ParseAs, Property, SimplificationPortfolio, SimplificationStrategy, Translation, Visualization,
+            }, files::Files,
+        }, convenience::{
             apply::Apply, compose::Compose, visualizing::formula_trees::grow_tree_from_formula,
-        },
-        formatting::fol::sigma_0::{latex, tptp},
-        normalizing::asp::{
+        }, formatting::fol::sigma_0::{latex, tptp}, normalizing::asp::{
             numeric_normal::numeric_normal_form, standard_program::standardize_program,
-        },
-        simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC},
-        syntax_tree::{
+        }, simplifying::fol::sigma_0::{classic::CLASSIC, ht::HT, intuitionistic::INTUITIONISTIC}, syntax_tree::{
             Node as _, asp,
             fol::sigma_0::{self as fol, Theory},
-        },
-        translating::{
+        }, translating::{
             classical_reduction::{completion::Completion as _, gamma::Gamma as _},
             formula_representation::{
                 mu::Mu as _, natural::Natural as _, numeric_natural::numeric_natural,
                 tau_star::TauStar as _,
             },
-        },
-        verifying::{
-            model_builder::{ModelBuilder, Report as CmReport, cvc5::Cvc5},
-            problem::Interpretation,
-            prover::{Prover, Report as AtpReport, Status, Success, vampire::Vampire},
-            task::{
+        }, verifying::{
+            model_builder::{ModelBuilder, ModelBuildingBackend, Report as CmReport, cvc5::Cvc5, fest::Fest}, problem::Interpretation, prover::{Prover, Report as AtpReport, Status, Success, vampire::Vampire}, task::{
                 Task, external_equivalence::ExternalEquivalenceTask,
                 strong_equivalence::StrongEquivalenceTask,
             },
         },
-    },
-    anyhow::{Context, Result, anyhow},
-    clap::Parser as _,
-    either::Either,
-    indexmap::IndexSet,
-    petgraph::dot::{Config, Dot},
-    std::{
+    }, anyhow::{Context, Result, anyhow}, clap::Parser as _, either::Either, indexmap::IndexSet, petgraph::dot::{Config, Dot}, std::{
         fs::{self, File},
         io::{self, Write, stdin},
         path::{Path, PathBuf},
@@ -377,12 +357,14 @@ pub fn main() -> Result<()> {
             backend,
             program_dialect,
             spec_dialect,
-            with_countermodel,
+            countermodel,
         } => {
             let start_time = Instant::now();
 
             let files =
                 Files::sort(files).context("unable to sort the given files by their function")?;
+
+            let with_countermodel = matches!(countermodel, arguments::ModelBuilder::Cvc5 | arguments::ModelBuilder::Fest);
 
             let task_problems = match equivalence {
                 Equivalence::Strong => {
@@ -511,39 +493,21 @@ pub fn main() -> Result<()> {
 
                 let mut handle = None;
                 if with_countermodel {
-                    let builder = Cvc5 {
-                        time_limit,
-                        //cores: 1,
+                    let backend = match countermodel {
+                        arguments::ModelBuilder::Cvc5 => ModelBuildingBackend::Cvc5(Cvc5 {
+                            time_limit,
+                        }),
+                        arguments::ModelBuilder::Fest => ModelBuildingBackend::Fest(Fest {
+                            time_limit,
+                        }),
+                        arguments::ModelBuilder::None => unreachable!(),
                     };
 
                     // TODO: an "unsat" status indicates the ATP problem is valid?
                     // Run countermodel building in parallel to proof search
                     // Returns Some(model) if a countermodel is found
                     let thread_handle = thread::spawn(move || {
-                        let mut message = String::new();
-                        let mut model = None;
-                        for problem in task_problems.countermodel_problems {
-                            match builder.build(problem) {
-                                Ok(report) => match report.model() {
-                                    Ok(result) => match result {
-                                        Some(m) => {
-                                            message = report.status().unwrap().to_string();
-                                            model = Some(m);
-                                        }
-                                        None => {
-                                            message = "missing model".to_string();
-                                        }
-                                    },
-                                    Err(err) => {
-                                        message = err.to_string();
-                                    }
-                                },
-                                Err(err) => {
-                                    message = err.to_string();
-                                }
-                            }
-                        }
-                        (message, model)
+                        backend.execute_problems(task_problems.countermodel_problems)
                     });
                     handle = Some(thread_handle);
                 }

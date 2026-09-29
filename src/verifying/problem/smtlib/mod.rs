@@ -205,7 +205,7 @@ impl fmt::Display for Problem {
 
         // Set logic
         match self.logic {
-            Logic::Ufnia => writeln!(f, "(set-logic UF_NIA)")?,
+            Logic::Ufnia => writeln!(f, "(set-logic UFNIA)")?,
             Logic::Qfnia => writeln!(f, "(set-logic QF_NIA)")?,
         }
 

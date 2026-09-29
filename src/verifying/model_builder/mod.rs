@@ -1,15 +1,12 @@
 use {
-    crate::verifying::problem::smtlib::Problem,
-    lazy_static::lazy_static,
-    regex::Regex,
-    std::{
+    crate::verifying::problem::smtlib::{self, Problem}, lazy_static::lazy_static, regex::Regex, std::{
         fmt::{Debug, Display},
         str::FromStr,
-    },
-    thiserror::Error,
+    }, thiserror::Error,
 };
 
 pub mod cvc5;
+pub mod fest;
 
 lazy_static! {
     static ref STATUS: Regex = Regex::new(r"(?<status>[[:word:]]+)").unwrap();
@@ -134,4 +131,65 @@ pub trait ModelBuilder: Debug + Clone + Send + 'static {
     // ) -> Box<dyn Iterator<Item = Result<Self::Report, Self::Error>>> {
     //     todo!()
     // }
+}
+
+pub enum ModelBuildingBackend {
+    Cvc5(cvc5::Cvc5),
+    Fest(fest::Fest),
+}
+
+impl ModelBuildingBackend {
+    pub(crate) fn execute_problems(&self, problems: Vec<smtlib::Problem>) -> (String, Option<Model>) {
+        let mut message = String::new();
+        let mut model = None;
+        match self {
+            ModelBuildingBackend::Cvc5(cvc5) => {
+                for problem in problems {
+                    match cvc5.build(problem) {
+                        Ok(report) => match report.model() {
+                            Ok(result) => match result {
+                                Some(m) => {
+                                    message = report.status().unwrap().to_string();
+                                    model = Some(m);
+                                }
+                                None => {
+                                    message = "missing model".to_string();
+                                }
+                            },
+                            Err(err) => {
+                                message = err.to_string();
+                            }
+                        },
+                        Err(err) => {
+                            message = err.to_string();
+                        }
+                    }
+                }
+            },
+            ModelBuildingBackend::Fest(fest) => {
+                for problem in problems {
+                    match fest.build(problem) {
+                        Ok(report) => match report.model() {
+                            Ok(result) => match result {
+                                Some(m) => {
+                                    message = report.status().unwrap().to_string();
+                                    model = Some(m);
+                                }
+                                None => {
+                                    message = "missing model".to_string();
+                                }
+                            },
+                            Err(err) => {
+                                message = err.to_string();
+                            }
+                        },
+                        Err(err) => {
+                            message = err.to_string();
+                        }
+                    }
+                }
+            },
+        }
+        (message, model)
+    }
 }
